@@ -15,7 +15,7 @@ class AppendOnlyNetworkDb(sqlite: Connection) {
   using(sqlite.createStatement()) { statement =>
     statement.executeUpdate("CREATE TABLE IF NOT EXISTS nodes (node_id BLOB NOT NULL, timestamp INTEGER NOT NULL)")
     statement.executeUpdate("CREATE TABLE IF NOT EXISTS channels (short_channel_id INTEGER NOT NULL, node_id_1 BLOB NOT NULL, node_id_2 BLOB NOT NULL, capacity_sat INTEGER NOT NULL)")
-    statement.executeUpdate("CREATE TABLE IF NOT EXISTS updates (short_channel_id INTEGER NOT NULL, node_flag INTEGER NOT NULL, timestamp INTEGER NOT NULL, flags BLOB NOT NULL, cltv_expiry_delta INTEGER NOT NULL, htlc_minimum_msat INTEGER NOT NULL, fee_base_msat INTEGER NOT NULL, fee_proportional_millionths INTEGER NOT NULL, htlc_maximum_msat INTEGER)")
+    statement.executeUpdate("CREATE TABLE IF NOT EXISTS updates (short_channel_id INTEGER NOT NULL, timestamp INTEGER NOT NULL, message_flags INTEGER NOT NULL, channel_flags INTEGER NOT NULL, cltv_expiry_delta INTEGER NOT NULL, htlc_minimum_msat INTEGER NOT NULL, fee_base_msat INTEGER NOT NULL, fee_proportional_millionths INTEGER NOT NULL, htlc_maximum_msat INTEGER)")
   }
 
   def addNode(n: NodeAnnouncement): Unit = {
@@ -39,9 +39,9 @@ class AppendOnlyNetworkDb(sqlite: Connection) {
   def addUpdate(u: ChannelUpdate): Unit = {
     using(sqlite.prepareStatement("INSERT OR IGNORE INTO updates VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")) { statement =>
       statement.setLong(1, u.shortChannelId.toLong)
-      statement.setBoolean(2, Announcements.isNode1(u.channelFlags))
-      statement.setLong(3, u.timestamp)
-      statement.setBytes(4, Array(u.messageFlags, u.channelFlags))
+      statement.setLong(2, u.timestamp)
+      statement.setByte(3, u.messageFlags)
+      statement.setByte(4, u.channelFlags)
       statement.setInt(5, u.cltvExpiryDelta)
       statement.setLong(6, u.htlcMinimumMsat)
       statement.setLong(7, u.feeBaseMsat)
