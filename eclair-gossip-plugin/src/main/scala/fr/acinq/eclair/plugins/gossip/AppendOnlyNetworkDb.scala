@@ -37,7 +37,7 @@ class AppendOnlyNetworkDb(sqlite: Connection) {
   }
 
   def addUpdate(u: ChannelUpdate): Unit = {
-    using(sqlite.prepareStatement("INSERT OR IGNORE INTO channel_updates VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")) { statement =>
+    using(sqlite.prepareStatement("INSERT OR IGNORE INTO updates VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")) { statement =>
       statement.setLong(1, u.shortChannelId.toLong)
       statement.setBoolean(2, Announcements.isNode1(u.channelFlags))
       statement.setLong(3, u.timestamp)
