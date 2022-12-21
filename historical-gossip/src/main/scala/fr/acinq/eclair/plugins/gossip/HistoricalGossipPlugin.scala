@@ -24,19 +24,19 @@ import grizzled.slf4j.Logging
 
 import java.io.File
 
-class GossipPlugin extends Plugin with Logging {
+class HistoricalGossipPlugin extends Plugin with Logging {
 
   var db: AppendOnlyNetworkDb = _
 
   override def params: PluginParams = new PluginParams {
-    override def name: String = "GossipPlugin"
+    override def name: String = "HistoricalGossipPlugin"
   }
 
   override def onSetup(setup: Setup): Unit = {
     // We create our DB in the per-chain data directory.
     val chain = setup.config.getString("chain")
     val chainDir = new File(setup.datadir, chain)
-    db = new AppendOnlyNetworkDb(SqliteUtils.openSqliteFile(chainDir, "append-network.sqlite", exclusiveLock = false, journalMode = "wal", syncFlag = "normal"))
+    db = new AppendOnlyNetworkDb(SqliteUtils.openSqliteFile(chainDir, "historical-gossip.sqlite", exclusiveLock = false, journalMode = "wal", syncFlag = "normal"))
   }
 
   override def onKit(kit: Kit): Unit = {
