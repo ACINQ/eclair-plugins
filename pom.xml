@@ -1,17 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>fr.acinq.eclair</groupId>
-    <artifactId>eclair-plugins_2.11</artifactId>
-    <version>0.1-SNAPSHOT</version>
+    <artifactId>eclair-plugins_2.13</artifactId>
+    <version>0.8.1-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <modules>
         <module>eclair-gossip-plugin</module>
     </modules>
 
-    <description>Plugins for eclair.</description>
+    <description>Official eclair plugins</description>
     <url>https://github.com/ACINQ/eclair-plugins</url>
     <name>${project.artifactId}</name>
 
@@ -31,59 +32,94 @@
         <developer>
             <id>pm47</id>
         </developer>
+        <developer>
+            <id>t-bast</id>
+        </developer>
     </developers>
 
     <properties>
+        <project.build.outputTimestamp>2020-01-01T00:00:00Z</project.build.outputTimestamp>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.source>1.8</maven.compiler.source>
-        <maven.compiler.target>1.8</maven.compiler.target>
-        <scala.version>2.11.12</scala.version>
-        <scala.version.short>2.11</scala.version.short>
-        <akka.version>2.4.20</akka.version>
-        <akka-http.version>10.0.11</akka-http.version>
-        <eclair.version>0.3-SNAPSHOT</eclair.version>
-        <logback.version>1.2.3</logback.version>
-        <scalatest.version>3.0.5</scalatest.version>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
+        <scala.version>2.13.10</scala.version>
+        <scala.version.short>2.13</scala.version.short>
+        <scalatest.version>3.2.12</scalatest.version>
+        <akka.version>2.6.20</akka.version>
+        <akka.http.version>10.2.7</akka.http.version>
+        <eclair.version>0.8.0</eclair.version>
     </properties>
 
     <build>
         <pluginManagement>
             <plugins>
                 <plugin>
-                    <groupId>pl.project13.maven</groupId>
-                    <artifactId>git-commit-id-plugin</artifactId>
-                    <version>2.2.3</version>
-                </plugin>
-                <plugin>
-                    <groupId>com.github.chrisdchristo</groupId>
-                    <artifactId>capsule-maven-plugin</artifactId>
-                    <version>1.5.1</version>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-dependency-plugin</artifactId>
+                    <version>3.0.2</version>
+                    <executions>
+                        <execution>
+                            <phase>package</phase>
+                            <goals>
+                                <goal>copy-dependencies</goal>
+                            </goals>
+                            <configuration>
+                                <outputDirectory>${project.build.directory}/lib</outputDirectory>
+                            </configuration>
+                        </execution>
+                    </executions>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-assembly-plugin</artifactId>
-                    <version>3.1.0</version>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <version>3.2.0</version>
                 </plugin>
             </plugins>
         </pluginManagement>
         <plugins>
             <plugin>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <version>3.2.0</version>
+                <inherited>true</inherited>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>versions-maven-plugin</artifactId>
+                <version>2.3</version>
+            </plugin>
+            <plugin>
+                <groupId>pl.project13.maven</groupId>
+                <artifactId>git-commit-id-plugin</artifactId>
+                <version>2.2.3</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>revision</goal>
+                        </goals>
+                        <configuration>
+                            <failOnNoGitDirectory>false</failOnNoGitDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <groupId>net.alchim31.maven</groupId>
                 <artifactId>scala-maven-plugin</artifactId>
-                <version>3.3.1</version>
+                <version>4.7.2</version>
                 <configuration>
                     <args combine.children="append">
-                        <arg>-deprecation</arg>
                         <arg>-feature</arg>
                         <arg>-language:postfixOps</arg>
                         <arg>-language:implicitConversions</arg>
-                        <arg>-Xfatal-warnings</arg>
+                        <arg>-Werror</arg>
                         <arg>-unchecked</arg>
-                        <arg>-Xmax-classfile-name</arg>
-                        <arg>140</arg>
-                        <!-- needed to compile Scala code on JDK9+ -->
-                        <arg>-nobootcp</arg>
+                        <arg>-deprecation</arg>
                     </args>
+                    <jvmArgs>
+                        <jvmArg>-Xmx1024m</jvmArg>
+                        <jvmArg>-Xms1024m</jvmArg>
+                        <jvmArg>-Xss32m</jvmArg>
+                    </jvmArgs>
                     <scalaCompatVersion>${scala.version.short}</scalaCompatVersion>
                 </configuration>
                 <executions>
@@ -100,6 +136,7 @@
                             <goal>doc-jar</goal>
                         </goals>
                         <configuration>
+                            <skip>${maven.test.skip}</skip>
                             <args>
                                 <arg>-no-link-warnings</arg>
                             </args>
@@ -110,7 +147,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-source-plugin</artifactId>
-                <version>3.0.1</version>
+                <version>3.2.0</version>
                 <executions>
                     <execution>
                         <id>attach-sources</id>
@@ -164,12 +201,14 @@
             <plugin>
                 <groupId>org.scalatest</groupId>
                 <artifactId>scalatest-maven-plugin</artifactId>
-                <version>2.0.0</version>
+                <version>2.0.2</version>
                 <configuration>
-                    <parallel>false</parallel>
+                    <parallel>true</parallel>
+                    <stdout>I</stdout>
                     <systemProperties>
                         <buildDirectory>${project.build.directory}</buildDirectory>
                     </systemProperties>
+                    <argLine>-Xmx2048m -Dfile.encoding=UTF-8</argLine>
                 </configuration>
                 <executions>
                     <execution>
@@ -182,6 +221,13 @@
             </plugin>
         </plugins>
     </build>
+
+    <repositories>
+        <repository>
+            <id>sonatype snapshots</id>
+            <url>https://oss.sonatype.org/content/repositories/snapshots/</url>
+        </repository>
+    </repositories>
 
     <dependencies>
         <dependency>
