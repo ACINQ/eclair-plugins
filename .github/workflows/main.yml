@@ -34,7 +34,7 @@ jobs:
           distribution: 'adopt'
 
       - name: Build eclair
-        run: mvn package -DskipTests
+        run: mvn install -DskipTests
         working-directory: ./eclair
 
       - name: Build eclair plugins
