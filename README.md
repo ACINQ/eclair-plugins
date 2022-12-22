@@ -1,4 +1,4 @@
-# Official Eclair Plugins
+# Eclair Plugins
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
@@ -14,9 +14,7 @@ eclair-node-<version>/bin/eclair-node.sh <plugin1.jar> <plugin2.jar> <...>
 
 ## Creating a plugin
 
-Eclair supports plugins written in Scala, Java, or any JVM-compatible language.
-
-A valid plugin is a jar that contains an implementation of the [Plugin](https://github.com/ACINQ/eclair/blob/master/eclair-node/src/main/scala/fr/acinq/eclair/Plugin.scala) interface, and a manifest entry for `Main-Class` with the FQDN of the implementation.
+To create a new plugin, follow the instructions in our [documentation](./docs/README.md).
 
 ## Unofficial plugins
 
