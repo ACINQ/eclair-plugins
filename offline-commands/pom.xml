@@ -8,9 +8,9 @@
         <version>0.8.1-SNAPSHOT</version>
     </parent>
 
-    <artifactId>historical-gossip-plugin</artifactId>
+    <artifactId>offline-commands-plugin</artifactId>
     <packaging>jar</packaging>
-    <name>historical-gossip-plugin</name>
+    <name>offline-commands-plugin</name>
 
     <build>
         <plugins>
@@ -20,10 +20,9 @@
                 <version>3.2.1</version>
                 <configuration>
                     <transformers>
-                        <!-- Add a manifest entry for Main-Class with the FQDN of the implementation. -->
                         <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                             <manifestEntries>
-                                <Main-Class>fr.acinq.eclair.plugins.gossip.HistoricalGossipPlugin</Main-Class>
+                                <Main-Class>fr.acinq.eclair.plugins.offlinecommands.OfflineCommandsPlugin</Main-Class>
                             </manifestEntries>
                         </transformer>
                     </transformers>
@@ -50,14 +49,35 @@
         <dependency>
             <groupId>fr.acinq.eclair</groupId>
             <artifactId>eclair-core_${scala.version.short}</artifactId>
-            <version>${eclair.version}</version>
+            <version>${project.version}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>fr.acinq.eclair</groupId>
             <artifactId>eclair-node_${scala.version.short}</artifactId>
-            <version>${eclair.version}</version>
+            <version>${project.version}</version>
             <scope>provided</scope>
+        </dependency>
+        <!-- TESTS -->
+        <dependency>
+            <groupId>com.typesafe.akka</groupId>
+            <artifactId>akka-testkit_${scala.version.short}</artifactId>
+            <version>${akka.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.typesafe.akka</groupId>
+            <artifactId>akka-actor-testkit-typed_${scala.version.short}</artifactId>
+            <version>${akka.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>fr.acinq.eclair</groupId>
+            <artifactId>eclair-core_${scala.version.short}</artifactId>
+            <version>${project.version}</version>
+            <classifier>tests</classifier>
+            <type>test-jar</type>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 
