@@ -1,5 +1,6 @@
 # Eclair Plugins
 
+[![Build Status](https://github.com/acinq/eclair-plugins/workflows/Build%20&%20Test/badge.svg)](https://github.com/acinq/eclair-plugins/actions?query=workflow%3A%22Build+%26+Test%22)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
 This repository contains plugins for [eclair](https://github.com/acinq/eclair) that are officially maintained by ACINQ.

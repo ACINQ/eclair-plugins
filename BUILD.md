@@ -2,8 +2,20 @@
 
 ## Requirements
 
-- [OpenJDK 11](https://adoptopenjdk.net/?variant=openjdk11&jvmVariant=hotspot).
+- [OpenJDK 11](https://adoptopenjdk.net/?variant=openjdk11&jvmVariant=hotspot)
 - [Maven](https://maven.apache.org/download.cgi) 3.6.3 or newer
+
+## Build eclair
+
+Eclair plugins depend on eclair: you must first have a packaged version of eclair in your local maven repository (usually found in `$HOME/.m2`).
+Clone the version of eclair you're interested in (in most cases it will either be `master` or the latest release) and, in the eclair repository, run the following commands:
+
+```shell
+# Install eclair to your local maven repository:
+mvn install -DskipTests
+# Get the corresponding eclair version:
+ECLAIR_VERSION=$(mvn help:evaluate -q -Dexpression=project.version -DforceStdout)
+```
 
 ## Build
 
@@ -14,6 +26,14 @@ To build all plugins and run the tests, simply run:
 ```shell
 mvn package
 ```
+
+If you're using a version of eclair that is different from the version of eclair-plugins, you'll need to specify it explicitly:
+
+```shell
+mvn -Declair.version=$ECLAIR_VERSION package 
+```
+
+You can also change the `eclair.version` property in `pom.xml`.
 
 Notes:
 
@@ -42,10 +62,17 @@ To run tests for a specific class, run:
 mvn test -Dsuites=*<TestClassName>
 ```
 
-### Build specific plugin
-
-To only build a specific plugin, run:
+To run tests using a specific number of threads, run:
 
 ```shell
-mvn package -pl <plugin-name> -am -Dmaven.test.skip=true
+mvn -T <thread_count> test
+```
+
+### Build specific plugins
+
+To only build a specific plugin, run the previous commands directly in its directory:
+
+```shell
+cd plugin-name
+mvn package
 ```
