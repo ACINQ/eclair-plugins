@@ -17,12 +17,9 @@
 package fr.acinq.eclair.plugins.channelinterceptor
 
 import akka.actor.typed.Behavior
-import akka.actor.typed.eventstream.EventStream
-import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
-import fr.acinq.eclair.channel.ChannelConfig
-import fr.acinq.eclair.io.OpenChannelReceived
-import fr.acinq.eclair.io.Peer.{OutgoingMessage, SpawnChannelNonInitiator}
+import akka.actor.typed.scaladsl.Behaviors
 import fr.acinq.eclair.wire.protocol.{Error, OpenDualFundedChannel}
+import fr.acinq.eclair.{AcceptOpenChannel, InterceptOpenChannelReceived, RejectOpenChannel}
 
 /**
  * Intercept OpenChannel and OpenDualFundedChannel messages received by the node. Respond to the peer
@@ -33,36 +30,26 @@ import fr.acinq.eclair.wire.protocol.{Error, OpenDualFundedChannel}
 
 object OpenChannelInterceptor {
 
-  def apply(): Behavior[Command] = {
+  def apply(): Behavior[InterceptOpenChannelReceived] = {
     Behaviors.setup {
-      context => new OpenChannelInterceptor(context).start()
+      _ => new OpenChannelInterceptor().start()
     }
   }
-
-  // @formatter:off
-  sealed trait Command
-  // @formatter:on
-
-  private case class WrappedOpenChannelReceived(openChannelReceived: OpenChannelReceived) extends Command
-
 }
 
-private class OpenChannelInterceptor(context: ActorContext[OpenChannelInterceptor.Command]) {
+private class OpenChannelInterceptor() {
 
-  import OpenChannelInterceptor._
-
-  def start(): Behavior[Command] = {
-    context.system.eventStream ! EventStream.Subscribe(context.messageAdapter[OpenChannelReceived](WrappedOpenChannelReceived))
+  private def start(): Behavior[InterceptOpenChannelReceived] = {
 
     Behaviors.receiveMessage {
-      case WrappedOpenChannelReceived(wo) =>
-        wo.peer ! (wo.open match {
+      o: InterceptOpenChannelReceived =>
+        o.replyTo ! (o.open match {
           case Left(_) =>
             // example: accept all single funded open channel requests
-            SpawnChannelNonInitiator(wo.open, ChannelConfig.standard, wo.channelType, wo.localParams)
+            AcceptOpenChannel(o.temporaryChannelId, o.localParams, o.fundingAmount_opt)
           case Right(o: OpenDualFundedChannel) =>
             // example: fail all dual funded open channel requests
-            OutgoingMessage(Error(o.temporaryChannelId, "dual funded channel request rejected"), wo.connectionInfo.peerConnection)
+            RejectOpenChannel(o.temporaryChannelId, Error(o.temporaryChannelId, "dual funded channels are not supported"))
         })
         Behaviors.same
     }

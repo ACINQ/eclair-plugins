@@ -20,8 +20,7 @@ import akka.actor.ActorSystem
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.scaladsl.adapter.ClassicActorSystemOps
 import akka.actor.typed.{ActorRef, SupervisorStrategy}
-import fr.acinq.eclair.InterceptedMessageType.InterceptOpenChannel
-import fr.acinq.eclair.{InterceptMessagePlugin, InterceptedMessageType, Kit, NodeParams, Plugin, PluginParams, Setup}
+import fr.acinq.eclair.{InterceptOpenChannelPlugin, InterceptOpenChannelReceived, Kit, NodeParams, Plugin, PluginParams, Setup}
 import grizzled.slf4j.Logging
 
 /**
@@ -29,14 +28,16 @@ import grizzled.slf4j.Logging
  * of accepting the request, potentially with different local parameters, or failing the request.
  */
 
-class ChannelInterceptorPlugin extends Plugin with Logging {
-  var pluginKit: ChannelInterceptorKit = _
+class OpenChannelInterceptorPlugin extends Plugin with Logging {
+  var pluginKit: OpenChannelInterceptorKit = _
 
-  override def params: PluginParams = new InterceptMessagePlugin {
+  override def params: PluginParams = new InterceptOpenChannelPlugin {
     // @formatter:off
-    override def name: String = "ChannelInterceptorPlugin"
-    override def canIntercept: Set[InterceptedMessageType.Value] = Set(InterceptOpenChannel)
+    override def name: String = "OpenChannelInterceptorPlugin"
     // @formatter:on
+    override def getOpenChannelInterceptor: ActorRef[InterceptOpenChannelReceived] = {
+      pluginKit.openChannelInterceptor
+    }
   }
 
   override def onSetup(setup: Setup): Unit = {
@@ -44,8 +45,8 @@ class ChannelInterceptorPlugin extends Plugin with Logging {
 
   override def onKit(kit: Kit): Unit = {
     val openChannelInterceptor = kit.system.spawn(Behaviors.supervise(OpenChannelInterceptor()).onFailure(SupervisorStrategy.restart), "open-channel-interceptor")
-    pluginKit = ChannelInterceptorKit(kit.nodeParams, kit.system, openChannelInterceptor)
+    pluginKit = OpenChannelInterceptorKit(kit.nodeParams, kit.system, openChannelInterceptor)
   }
 }
 
-case class ChannelInterceptorKit(nodeParams: NodeParams, system: ActorSystem, openChannelInterceptor: ActorRef[OpenChannelInterceptor.Command])
+case class OpenChannelInterceptorKit(nodeParams: NodeParams, system: ActorSystem, openChannelInterceptor: ActorRef[InterceptOpenChannelReceived])
