@@ -46,7 +46,7 @@ private class OpenChannelInterceptor() {
         o.replyTo ! (o.open match {
           case Left(_) =>
             // example: accept all single funded open channel requests
-            AcceptOpenChannel(o.temporaryChannelId, o.localParams, o.fundingAmount_opt)
+            AcceptOpenChannel(o.temporaryChannelId, o.localParams)
           case Right(o: OpenDualFundedChannel) =>
             // example: fail all dual funded open channel requests
             RejectOpenChannel(o.temporaryChannelId, Error(o.temporaryChannelId, "dual funded channels are not supported"))
