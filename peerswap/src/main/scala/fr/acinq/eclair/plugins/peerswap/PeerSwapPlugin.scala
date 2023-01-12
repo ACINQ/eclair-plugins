@@ -88,7 +88,7 @@ class PeerSwapPlugin extends Plugin with RouteProvider with Logging {
   }
 
   override def onKit(kit: Kit): Unit = {
-    val data = db.restore().toSet
+    val data = db.restore()
     val swapRegister = kit.system.spawn(Behaviors.supervise(SwapRegister(kit.nodeParams, kit.paymentInitiator, kit.watcher, kit.register, kit.switchboard, kit.wallet, swapKeyManager, db, data)).onFailure(SupervisorStrategy.restart), "peerswap-plugin-swap-register")
     pluginKit = PeerSwapKit(kit.nodeParams, kit.system, swapRegister, db)
   }
@@ -101,10 +101,10 @@ case class PeerSwapKit(nodeParams: NodeParams, system: ActorSystem, swapRegister
   private implicit val ec: ExecutionContext = ExecutionContext.fromExecutor(Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("db-pending-commands").build()))
 
   def swapIn(shortChannelId: ShortChannelId, amount: Satoshi)(implicit timeout: Timeout): Future[Response] =
-    swapRegister.ask(ref => SwapRegister.SwapRequested(ref, Maker, amount, shortChannelId, None))(timeout, system.scheduler.toTyped)
+    swapRegister.ask(ref => SwapRegister.SwapRequested(ref, Maker, amount, shortChannelId, None, None))(timeout, system.scheduler.toTyped)
 
   def swapOut(shortChannelId: ShortChannelId, amount: Satoshi)(implicit timeout: Timeout): Future[Response] =
-    swapRegister.ask(ref => SwapRegister.SwapRequested(ref, Taker, amount, shortChannelId, None))(timeout, system.scheduler.toTyped)
+    swapRegister.ask(ref => SwapRegister.SwapRequested(ref, Taker, amount, shortChannelId, None, None))(timeout, system.scheduler.toTyped)
 
   def listSwaps()(implicit timeout: Timeout): Future[Iterable[Status]] =
     swapRegister.ask(ref => SwapRegister.ListPendingSwaps(ref))(timeout, system.scheduler.toTyped)

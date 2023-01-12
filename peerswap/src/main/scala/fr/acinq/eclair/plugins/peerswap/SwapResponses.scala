@@ -16,13 +16,15 @@
 
 package fr.acinq.eclair.plugins.peerswap
 
+import fr.acinq.bitcoin.scalacompat.Crypto.PublicKey
 import fr.acinq.bitcoin.scalacompat.{Satoshi, Transaction}
-import fr.acinq.eclair.{MilliSatoshi, ShortChannelId}
 import fr.acinq.eclair.blockchain.OnChainWallet.MakeFundingTxResponse
+import fr.acinq.eclair.channel.{CMD_GET_CHANNEL_INFO, Register}
 import fr.acinq.eclair.db.OutgoingPaymentStatus.Failed
 import fr.acinq.eclair.payment.Bolt11Invoice.ExtraHop
-import fr.acinq.eclair.payment.{Bolt11Invoice, PaymentEvent}
-import fr.acinq.eclair.plugins.peerswap.wire.protocol.{HasSwapId, OpeningTxBroadcasted, SwapAgreement, SwapRequest}
+import fr.acinq.eclair.payment.PaymentEvent
+import fr.acinq.eclair.plugins.peerswap.wire.protocol.{HasSwapId, SwapRequest}
+import fr.acinq.eclair.{MilliSatoshi, ShortChannelId}
 
 object SwapResponses {
 
@@ -42,9 +44,9 @@ object SwapResponses {
     override def toString: String = s"swap $swapId opened successfully."
   }
 
-  case class SwapExistsForChannel(shortChannelId: String) extends Fail {
+  case class SwapExistsForChannel(shortChannelId: ShortChannelId) extends Fail {
     override def swapId: String = ""
-    override def toString: String = s"swap already exists for channel $shortChannelId"
+    override def toString: String = s"swap already exists for channel ${shortChannelId.toCoordinatesString}"
   }
 
   case class SwapNotFound(swapId: String) extends Fail {
@@ -59,8 +61,14 @@ object SwapResponses {
     override def toString: String = s"swap $swapId canceled by peer, reason: $reason."
   }
 
-  case class CreateFailed(swapId: String, reason: String) extends Fail {
-    override def toString: String = s"could not create swap: $reason."
+  case class ChannelInfoNotFound(shortChannelId: ShortChannelId, failure: Register.ForwardShortIdFailure[CMD_GET_CHANNEL_INFO]) extends Fail {
+    override def swapId: String = ""
+    override def toString: String = s"could not find channel with short channel id $shortChannelId: $failure."
+  }
+
+  case class PeerInfoNotFound(scid: String, remoteNodeId: PublicKey) extends Fail {
+    override def swapId: String = ""
+    override def toString: String = s"could not find peer with node id $remoteNodeId for channel $scid."
   }
 
   case class CreateInvoiceFailed(swapId: String, exception: Throwable) extends Error {

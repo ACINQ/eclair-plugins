@@ -29,7 +29,7 @@ import fr.acinq.eclair.blockchain.bitcoind.ZmqWatcher
 import fr.acinq.eclair.blockchain.bitcoind.ZmqWatcher._
 import fr.acinq.eclair.blockchain.{DummyOnChainWallet, OnChainWallet}
 import fr.acinq.eclair.channel.DATA_NORMAL
-import fr.acinq.eclair.io.Switchboard.ForwardUnknownMessage
+import fr.acinq.eclair.io.Peer.RelayUnknownMessage
 import fr.acinq.eclair.payment.{Bolt11Invoice, PaymentReceived}
 import fr.acinq.eclair.plugins.peerswap.SwapCommands._
 import fr.acinq.eclair.plugins.peerswap.SwapEvents._
@@ -73,15 +73,15 @@ case class SwapInSenderSpec() extends ScalaTestWithActorTestKit(ConfigFactory.lo
   val request: SwapInRequest = SwapInRequest(protocolVersion, swapId, noAsset, network, shortChannelId.toString, amount.toLong, makerPubkey.toHex)
   val agreement: SwapInAgreement = SwapInAgreement(protocolVersion, swapId, makerPubkey.toHex, premium)
 
-  def expectSwapMessage[B](switchboard: TestProbe[Any]): B = {
-    val unknownMessage = switchboard.expectMessageType[ForwardUnknownMessage].msg
+  def expectSwapMessage[B](remotePeer: TestProbe[Any]): B = {
+    val unknownMessage = remotePeer.expectMessageType[RelayUnknownMessage].unknownMessage
     val encoded = LightningMessageCodecs.unknownMessageCodec.encode(unknownMessage).require.toByteVector
     peerSwapMessageCodec.decode(encoded.toBitVector).require.value.asInstanceOf[B]
   }
 
   override def withFixture(test: OneArgTest): Outcome = {
     val watcher = testKit.createTestProbe[ZmqWatcher.Command]()
-    val switchboard = testKit.createTestProbe[Any]()
+    val remotePeer = testKit.createTestProbe[Any]()
     val paymentInitiator = testKit.createTestProbe[Any]()
     val wallet = new DummyOnChainWallet() {
       override def onChainBalance()(implicit ec: ExecutionContext): Future[OnChainBalance] = Future.successful(OnChainBalance(6930 sat, 0 sat))
@@ -93,12 +93,12 @@ case class SwapInSenderSpec() extends ScalaTestWithActorTestKit(ConfigFactory.lo
     // subscribe to notification events from SwapInSender when a payment is successfully received or claimed via coop or csv
     testKit.system.eventStream ! Subscribe[SwapEvent](swapEvents.ref)
 
-    val swapInSender = testKit.spawn(SwapMaker(remoteNodeId, TestConstants.Alice.nodeParams, watcher.ref, switchboard.ref.toClassic, wallet, keyManager, db), "swap-in-sender")
+    val swapInSender = testKit.spawn(SwapMaker(remoteNodeId, TestConstants.Alice.nodeParams, watcher.ref, remotePeer.ref.toClassic, wallet, keyManager, db), "swap-in-sender")
 
-    withFixture(test.toNoArgTest(FixtureParam(swapInSender, userCli, switchboard, paymentInitiator, watcher, wallet, swapEvents, remoteNodeId)))
+    withFixture(test.toNoArgTest(FixtureParam(swapInSender, userCli, remotePeer, paymentInitiator, watcher, wallet, swapEvents, remoteNodeId)))
   }
 
-  case class FixtureParam(swapInSender: ActorRef[SwapCommands.SwapCommand], userCli: TestProbe[Status], switchboard: TestProbe[Any], paymentInitiator: TestProbe[Any], watcher: TestProbe[ZmqWatcher.Command], wallet: OnChainWallet, swapEvents: TestProbe[SwapEvent], remoteNodeId: PublicKey)
+  case class FixtureParam(swapInSender: ActorRef[SwapCommands.SwapCommand], userCli: TestProbe[Status], remotePeer: TestProbe[Any], paymentInitiator: TestProbe[Any], watcher: TestProbe[ZmqWatcher.Command], wallet: OnChainWallet, swapEvents: TestProbe[SwapEvent], remoteNodeId: PublicKey)
 
   test("happy path from restored swap") { f =>
     import f._
@@ -111,7 +111,7 @@ case class SwapInSenderSpec() extends ScalaTestWithActorTestKit(ConfigFactory.lo
     swapInSender ! RestoreSwap(swapData)
 
     // resend OpeningTxBroadcasted when swap restored
-    expectSwapMessage[OpeningTxBroadcasted](switchboard)
+    expectSwapMessage[OpeningTxBroadcasted](remotePeer)
 
     // wait for SwapInSender to subscribe to PaymentEventReceived messages
     swapEvents.expectNoMessage()
@@ -145,7 +145,7 @@ case class SwapInSenderSpec() extends ScalaTestWithActorTestKit(ConfigFactory.lo
     swapInSender ! StartSwapInSender(amount, swapId, shortChannelId)
 
     // SwapInSender: SwapInRequest -> SwapInSender
-    val swapInRequest = expectSwapMessage[SwapInRequest](switchboard)
+    val swapInRequest = expectSwapMessage[SwapInRequest](remotePeer)
 
     // SwapInReceiver: SwapInAgreement -> SwapInSender
     swapInSender ! SwapMessageReceived(SwapInAgreement(swapInRequest.protocolVersion, swapInRequest.swapId, takerPubkey.toString(), premium))
@@ -154,7 +154,7 @@ case class SwapInSenderSpec() extends ScalaTestWithActorTestKit(ConfigFactory.lo
     swapEvents.expectMessageType[TransactionPublished].tx
 
     // SwapInSender:OpeningTxBroadcasted -> SwapInReceiver
-    val openingTxBroadcasted = expectSwapMessage[OpeningTxBroadcasted](switchboard)
+    val openingTxBroadcasted = expectSwapMessage[OpeningTxBroadcasted](remotePeer)
     val invoice = Bolt11Invoice.fromString(openingTxBroadcasted.payreq).get
 
     // wait for SwapInSender to subscribe to PaymentEventReceived messages
@@ -190,7 +190,7 @@ case class SwapInSenderSpec() extends ScalaTestWithActorTestKit(ConfigFactory.lo
     swapInSender ! RestoreSwap(swapData)
 
     // resend OpeningTxBroadcasted when swap restored
-    expectSwapMessage[OpeningTxBroadcasted](switchboard)
+    expectSwapMessage[OpeningTxBroadcasted](remotePeer)
 
     // wait for SwapInSender to subscribe to PaymentEventReceived messages
     swapEvents.expectNoMessage()
@@ -232,7 +232,7 @@ case class SwapInSenderSpec() extends ScalaTestWithActorTestKit(ConfigFactory.lo
     swapInSender ! RestoreSwap(swapData)
 
     // resend OpeningTxBroadcasted when swap restored
-    expectSwapMessage[OpeningTxBroadcasted](switchboard)
+    expectSwapMessage[OpeningTxBroadcasted](remotePeer)
 
     // wait to subscribe to PaymentEventReceived messages
     swapEvents.expectNoMessage()

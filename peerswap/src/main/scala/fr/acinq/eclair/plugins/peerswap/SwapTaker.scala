@@ -101,14 +101,14 @@ object SwapTaker {
 
   */
 
-  def apply(remoteNodeId: PublicKey, nodeParams: NodeParams, paymentInitiator: actor.ActorRef, watcher: ActorRef[ZmqWatcher.Command], switchboard: actor.ActorRef, wallet: OnChainWallet, keyManager: SwapKeyManager, db: SwapsDb): Behavior[SwapCommand] =
+  def apply(remoteNodeId: PublicKey, nodeParams: NodeParams, paymentInitiator: actor.ActorRef, watcher: ActorRef[ZmqWatcher.Command], remotePeer: actor.ActorRef, wallet: OnChainWallet, keyManager: SwapKeyManager, db: SwapsDb): Behavior[SwapCommand] =
     Behaviors.setup { context =>
       Behaviors.receiveMessagePartial {
-        case StartSwapOutSender(amount, swapId, shortChannelId) => new SwapTaker(remoteNodeId, shortChannelId, nodeParams, paymentInitiator, watcher, switchboard, wallet, keyManager, db, context)
+        case StartSwapOutSender(amount, swapId, shortChannelId) => new SwapTaker(remoteNodeId, shortChannelId, nodeParams, paymentInitiator, watcher, remotePeer, wallet, keyManager, db, context)
             .createSwap(amount, swapId)
         case StartSwapInReceiver(request: SwapInRequest) =>
           ShortChannelId.fromCoordinates(request.scid) match {
-            case Success(shortChannelId) => new SwapTaker(remoteNodeId, shortChannelId, nodeParams, paymentInitiator, watcher, switchboard, wallet, keyManager, db, context)
+            case Success(shortChannelId) => new SwapTaker(remoteNodeId, shortChannelId, nodeParams, paymentInitiator, watcher, remotePeer, wallet, keyManager, db, context)
               .validateRequest(request)
             case Failure(e) =>
               context.log.error(s"received swap request with invalid shortChannelId: $request, $e")
@@ -116,7 +116,7 @@ object SwapTaker {
           }
         case RestoreSwap(d) =>
           ShortChannelId.fromCoordinates(d.request.scid) match {
-            case Success(shortChannelId) => new SwapTaker(remoteNodeId, shortChannelId, nodeParams, paymentInitiator, watcher, switchboard, wallet, keyManager, db, context)
+            case Success(shortChannelId) => new SwapTaker(remoteNodeId, shortChannelId, nodeParams, paymentInitiator, watcher, remotePeer, wallet, keyManager, db, context)
               .payClaimInvoice(d.request, d.agreement, d.openingTxBroadcasted, d.invoice, d.isInitiator)
             case Failure(e) =>
               context.log.error(s"Could not restore from a checkpoint with an invalid shortChannelId: $d, $e")
@@ -127,7 +127,7 @@ object SwapTaker {
     }
 }
 
-private class SwapTaker(remoteNodeId: PublicKey, shortChannelId: ShortChannelId, nodeParams: NodeParams, paymentInitiator: actor.ActorRef, watcher: ActorRef[ZmqWatcher.Command], switchboard: actor.ActorRef, wallet: OnChainWallet, keyManager: SwapKeyManager, db: SwapsDb, implicit val context: ActorContext[SwapCommands.SwapCommand]) {
+private class SwapTaker(remoteNodeId: PublicKey, shortChannelId: ShortChannelId, nodeParams: NodeParams, paymentInitiator: actor.ActorRef, watcher: ActorRef[ZmqWatcher.Command], remotePeer: actor.ActorRef, wallet: OnChainWallet, keyManager: SwapKeyManager, db: SwapsDb, implicit val context: ActorContext[SwapCommands.SwapCommand]) {
   private val protocolVersion = 3
   private val noAsset = ""
   private val feeRatePerKw: FeeratePerKw = nodeParams.onChainFeeConf.feeEstimator.getFeeratePerKw(target = nodeParams.onChainFeeConf.feeTargets.fundingBlockTarget)
@@ -152,7 +152,7 @@ private class SwapTaker(remoteNodeId: PublicKey, shortChannelId: ShortChannelId,
   }
 
   private def awaitAgreement(request: SwapOutRequest): Behavior[SwapCommand] = {
-    send(switchboard, remoteNodeId)(request)
+    send(remotePeer)(request)
     receiveSwapMessage[AwaitAgreementMessages](context, "awaitAgreement") {
       case SwapMessageReceived(agreement: SwapOutAgreement) if agreement.protocolVersion != protocolVersion =>
         swapCanceled(WrongVersion(request.swapId, protocolVersion))
@@ -216,7 +216,7 @@ private class SwapTaker(remoteNodeId: PublicKey, shortChannelId: ShortChannelId,
 
   private def sendAgreement(request: SwapInRequest, agreement: SwapInAgreement): Behavior[SwapCommand] = {
     // TODO: SHOULD fail any htlc that would change the channel into a state, where the swap invoice can not be payed until the swap invoice was payed.
-    send(switchboard, remoteNodeId)(agreement)
+    send(remotePeer)(agreement)
     receiveSwapMessage[SendAgreementMessages](context, "sendAgreement") {
       case SwapMessageReceived(openingTxBroadcasted: OpeningTxBroadcasted) => awaitOpeningTxConfirmed(request, agreement, openingTxBroadcasted, isInitiator = false)
       case SwapMessageReceived(cancel: CancelSwap) => swapCanceled(PeerCanceled(request.swapId, cancel.message))
@@ -310,7 +310,7 @@ private class SwapTaker(remoteNodeId: PublicKey, shortChannelId: ShortChannelId,
 
   private def sendCoopClose(error: Error): Behavior[SwapCommand] = {
     context.log.error(s"swap ${error.swapId} sent coop close, reason: ${error.toString}")
-    send(switchboard, remoteNodeId)(CoopClose(error.swapId, error.toString, takerPrivkey(error.swapId).toHex))
+    send(remotePeer)(CoopClose(error.swapId, error.toString, takerPrivkey(error.swapId).toHex))
     swapCompleted(ClaimByCoopOffered(error.swapId, error.toString))
   }
 
@@ -324,7 +324,7 @@ private class SwapTaker(remoteNodeId: PublicKey, shortChannelId: ShortChannelId,
   private def swapCanceled(failure: Fail): Behavior[SwapCommand] = {
     context.system.eventStream ! Publish(Canceled(failure.swapId, failure.toString))
     context.log.error(s"canceled swap: $failure")
-    if (!failure.isInstanceOf[PeerCanceled]) send(switchboard, remoteNodeId)(CancelSwap(failure.swapId, failure.toString))
+    if (!failure.isInstanceOf[PeerCanceled]) send(remotePeer)(CancelSwap(failure.swapId, failure.toString))
     Behaviors.stopped
   }
 

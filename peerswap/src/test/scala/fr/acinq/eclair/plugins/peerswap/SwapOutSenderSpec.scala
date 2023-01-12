@@ -29,7 +29,7 @@ import fr.acinq.eclair.blockchain.bitcoind.ZmqWatcher.WatchTxConfirmedTriggered
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.blockchain.{DummyOnChainWallet, OnChainWallet}
 import fr.acinq.eclair.channel.DATA_NORMAL
-import fr.acinq.eclair.io.Switchboard.ForwardUnknownMessage
+import fr.acinq.eclair.io.Peer.RelayUnknownMessage
 import fr.acinq.eclair.payment.send.PaymentInitiator.SendPaymentToNode
 import fr.acinq.eclair.payment.{Bolt11Invoice, PaymentSent}
 import fr.acinq.eclair.plugins.peerswap.SwapCommands._
@@ -80,9 +80,9 @@ case class SwapOutSenderSpec() extends ScalaTestWithActorTestKit(ConfigFactory.l
   val blindingKey: String = ""
   val request: SwapOutRequest = SwapOutRequest(protocolVersion, swapId, noAsset, network, shortChannelId.toString, amount.toLong, makerPubkey.toHex)
 
-  def expectSwapMessage[B](switchboard: TestProbe[Any]): B = {
-    val unknownMessage = switchboard.expectMessageType[ForwardUnknownMessage].msg
-    val encoded = LightningMessageCodecs.unknownMessageCodec.encode(unknownMessage).require.toByteVector
+  def expectSwapMessage[B](remotePeer: TestProbe[Any]): B = {
+    val unknownMessage = remotePeer.expectMessageType[RelayUnknownMessage]
+    val encoded = LightningMessageCodecs.unknownMessageCodec.encode(unknownMessage.unknownMessage).require.toByteVector
     peerSwapMessageCodec.decode(encoded.toBitVector).require.value.asInstanceOf[B]
   }
   override def withFixture(test: OneArgTest): Outcome = {
@@ -90,7 +90,7 @@ case class SwapOutSenderSpec() extends ScalaTestWithActorTestKit(ConfigFactory.l
     val paymentHandler = testKit.createTestProbe[Any]()
     val relayer = testKit.createTestProbe[Any]()
     val router = testKit.createTestProbe[Any]()
-    val switchboard = testKit.createTestProbe[Any]()
+    val remotePeer = testKit.createTestProbe[Any]()
     val paymentInitiator = testKit.createTestProbe[Any]()
 
     val wallet = new DummyOnChainWallet()
@@ -102,12 +102,12 @@ case class SwapOutSenderSpec() extends ScalaTestWithActorTestKit(ConfigFactory.l
     // subscribe to notification events from SwapInReceiver when a payment is successfully received or claimed via coop or csv
     testKit.system.eventStream ! Subscribe[SwapEvent](swapEvents.ref)
 
-    val swapOutSender = testKit.spawn(SwapTaker(remoteNodeId, TestConstants.Bob.nodeParams, paymentInitiator.ref.toClassic, watcher.ref, switchboard.ref.toClassic, wallet, keyManager, db), "swap-out-sender")
+    val swapOutSender = testKit.spawn(SwapTaker(remoteNodeId, TestConstants.Bob.nodeParams, paymentInitiator.ref.toClassic, watcher.ref, remotePeer.ref.toClassic, wallet, keyManager, db), "swap-out-sender")
 
-    withFixture(test.toNoArgTest(FixtureParam(swapOutSender, userCli, switchboard, relayer, router, paymentInitiator, paymentHandler, TestConstants.Bob.nodeParams, watcher, wallet, swapEvents, remoteNodeId)))
+    withFixture(test.toNoArgTest(FixtureParam(swapOutSender, userCli, remotePeer, relayer, router, paymentInitiator, paymentHandler, TestConstants.Bob.nodeParams, watcher, wallet, swapEvents, remoteNodeId)))
   }
 
-  case class FixtureParam(swapOutSender: ActorRef[SwapCommands.SwapCommand], userCli: TestProbe[Status], switchboard: TestProbe[Any], relayer: TestProbe[Any], router: TestProbe[Any], paymentInitiator: TestProbe[Any], paymentHandler: TestProbe[Any], nodeParams: NodeParams, watcher: TestProbe[ZmqWatcher.Command], wallet: OnChainWallet, swapEvents: TestProbe[SwapEvent], remoteNodeId: PublicKey)
+  case class FixtureParam(swapOutSender: ActorRef[SwapCommands.SwapCommand], userCli: TestProbe[Status], remotePeer: TestProbe[Any], relayer: TestProbe[Any], router: TestProbe[Any], paymentInitiator: TestProbe[Any], paymentHandler: TestProbe[Any], nodeParams: NodeParams, watcher: TestProbe[ZmqWatcher.Command], wallet: OnChainWallet, swapEvents: TestProbe[SwapEvent], remoteNodeId: PublicKey)
 
   test("happy path for new swap out sender") { f =>
     import f._
@@ -116,7 +116,7 @@ case class SwapOutSenderSpec() extends ScalaTestWithActorTestKit(ConfigFactory.l
     swapOutSender ! StartSwapOutSender(amount, swapId, shortChannelId)
 
     // SwapOutSender: SwapOutRequest -> SwapOutReceiver
-    val request = expectSwapMessage[SwapOutRequest](switchboard)
+    val request = expectSwapMessage[SwapOutRequest](remotePeer)
     assert(request.pubkey == takerPubkey.toHex)
 
     // SwapOutReceiver: SwapOutAgreement -> SwapOutSender (request fee)

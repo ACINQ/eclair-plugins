@@ -23,7 +23,6 @@ import akka.actor.typed.{ActorRef, Behavior}
 import fr.acinq.bitcoin.ScriptFlags
 import fr.acinq.bitcoin.scalacompat.Crypto.PublicKey
 import fr.acinq.bitcoin.scalacompat.{ByteVector32, Crypto, Satoshi, Transaction}
-import fr.acinq.eclair.Features.RouteBlinding
 import fr.acinq.eclair.MilliSatoshi.toMilliSatoshi
 import fr.acinq.eclair.blockchain.OnChainWallet
 import fr.acinq.eclair.blockchain.OnChainWallet.MakeFundingTxResponse
@@ -32,7 +31,7 @@ import fr.acinq.eclair.blockchain.bitcoind.ZmqWatcher._
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.db.OutgoingPaymentStatus.{Failed, Pending, Succeeded}
 import fr.acinq.eclair.db.PaymentType
-import fr.acinq.eclair.io.Switchboard.ForwardUnknownMessage
+import fr.acinq.eclair.io.Peer.RelayUnknownMessage
 import fr.acinq.eclair.payment.send.PaymentInitiator.SendPaymentToNode
 import fr.acinq.eclair.payment.{Bolt11Invoice, PaymentFailed, PaymentReceived, PaymentSent}
 import fr.acinq.eclair.plugins.peerswap.SwapCommands._
@@ -99,8 +98,9 @@ private object SwapHelpers {
     UnknownMessage(encoded.sliceToInt(0, 16, signed = false), encoded.drop(16).toByteVector)
   }
 
-  def send(switchboard: actor.ActorRef, remoteNodeId: PublicKey)(message: HasSwapId): Unit =
-    switchboard ! ForwardUnknownMessage(remoteNodeId, makeUnknownMessage(message))
+  def send(remotePeer: actor.ActorRef)(message: HasSwapId): Unit = {
+    remotePeer ! RelayUnknownMessage(makeUnknownMessage(message))
+  }
 
   def fundOpening(wallet: OnChainWallet, feeRatePerKw: FeeratePerKw)(amount: Satoshi, makerPubkey: PublicKey, takerPubkey: PublicKey, invoice: Bolt11Invoice)(implicit context: ActorContext[SwapCommand]): Unit = {
     // setup conditions satisfied, create the opening tx
@@ -158,10 +158,9 @@ private object SwapHelpers {
   def createInvoice(nodeParams: NodeParams, amount: Satoshi, description: String)(implicit context: ActorContext[SwapCommand]): Try[Bolt11Invoice] =
     Try {
       val paymentPreimage = randomBytes32()
-      val invoiceFeatures = nodeParams.features.invoiceFeatures().remove(RouteBlinding)
       val invoice: Bolt11Invoice = Bolt11Invoice(nodeParams.chainHash, Some(toMilliSatoshi(amount)), Crypto.sha256(paymentPreimage), nodeParams.privateKey, Left(description),
         nodeParams.channelConf.minFinalExpiryDelta, fallbackAddress = None, expirySeconds = Some(nodeParams.invoiceExpiry.toSeconds),
-        extraHops = Nil, timestamp = TimestampSecond.now(), paymentSecret = paymentPreimage, paymentMetadata = None, features = invoiceFeatures)
+        extraHops = Nil, timestamp = TimestampSecond.now(), paymentSecret = paymentPreimage, paymentMetadata = None)
       context.log.debug("generated invoice={} from amount={} sat, description={}", invoice.toString, amount, description)
       nodeParams.db.payments.addIncomingPayment(invoice, paymentPreimage, PaymentType.Standard)
       invoice

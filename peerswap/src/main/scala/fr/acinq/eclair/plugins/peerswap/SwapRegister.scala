@@ -28,7 +28,7 @@ import fr.acinq.eclair.blockchain.OnChainWallet
 import fr.acinq.eclair.blockchain.bitcoind.ZmqWatcher
 import fr.acinq.eclair.channel.{CMD_GET_CHANNEL_INFO, RES_GET_CHANNEL_INFO, Register}
 import fr.acinq.eclair.io.Peer.RelayUnknownMessage
-import fr.acinq.eclair.io.UnknownMessageReceived
+import fr.acinq.eclair.io.{Peer, Switchboard, UnknownMessageReceived}
 import fr.acinq.eclair.plugins.peerswap.SwapCommands._
 import fr.acinq.eclair.plugins.peerswap.SwapHelpers.makeUnknownMessage
 import fr.acinq.eclair.plugins.peerswap.SwapRegister.Command
@@ -41,7 +41,6 @@ import fr.acinq.eclair.wire.protocol.LightningMessageCodecs.unknownMessageCodec
 import fr.acinq.eclair.{NodeParams, ShortChannelId, randomBytes32}
 import scodec.Attempt
 
-import scala.concurrent.duration.DurationInt
 import scala.reflect.ClassTag
 
 object SwapRegister {
@@ -52,29 +51,32 @@ object SwapRegister {
   }
 
   sealed trait RegisteringMessages extends Command
-  case class ChannelInfoFailure(replyTo: ActorRef[Response], failure: Register.ForwardShortIdFailure[CMD_GET_CHANNEL_INFO]) extends RegisteringMessages
+  private case class ChannelInfoFailure(replyTo: ActorRef[Response], shortChannelId: ShortChannelId, failure: Register.ForwardShortIdFailure[CMD_GET_CHANNEL_INFO]) extends RegisteringMessages
   case class WrappedUnknownMessageReceived(message: UnknownMessageReceived) extends RegisteringMessages
-  case class SwapRequested(replyTo: ActorRef[Response], role: SwapRole, amount: Satoshi, shortChannelId: ShortChannelId, remoteNodeId: Option[PublicKey]) extends RegisteringMessages
-  case class SwapTerminated(swapId: String) extends RegisteringMessages
+  case class SwapRequested(replyTo: ActorRef[Response], role: SwapRole, amount: Satoshi, shortChannelId: ShortChannelId, remoteNodeId: Option[PublicKey], remotePeer: Option[actor.ActorRef]) extends RegisteringMessages
+  private case class SwapTerminated(swapId: String) extends RegisteringMessages
   case class ListPendingSwaps(replyTo: ActorRef[Iterable[Status]]) extends RegisteringMessages
   case class CancelSwapRequested(replyTo: ActorRef[Response], swapId: String) extends RegisteringMessages with ReplyToMessages
+
+  sealed trait RestoringMessages extends Command
+  private case class PeerInfoFailure(replyTo: Option[ActorRef[Response]], scid: String, remoteNodeId: PublicKey) extends RestoringMessages with RegisteringMessages
+  private case class RestoreSwapWithPeer(swapData: SwapData, remotePeer: actor.ActorRef) extends RestoringMessages with RegisteringMessages
   // @formatter:on
 
-  def apply(nodeParams: NodeParams, paymentInitiator: actor.ActorRef, watcher: ActorRef[ZmqWatcher.Command], register: actor.ActorRef, switchboard: actor.ActorRef, wallet: OnChainWallet, keyManager: SwapKeyManager, db: SwapsDb, data: Set[SwapData]): Behavior[Command] = Behaviors.setup { context =>
-    new SwapRegister(context, nodeParams, paymentInitiator, watcher, register, switchboard, wallet, keyManager, db, data).start
+  def apply(nodeParams: NodeParams, paymentInitiator: actor.ActorRef, watcher: ActorRef[ZmqWatcher.Command], register: actor.ActorRef, switchboard: actor.ActorRef, wallet: OnChainWallet, keyManager: SwapKeyManager, db: SwapsDb, data: Seq[SwapData]): Behavior[Command] = Behaviors.setup { context =>
+    new SwapRegister(context, nodeParams, paymentInitiator, watcher, register, switchboard, wallet, keyManager, db).restoring(data, Map())
   }
 }
 
-private class SwapRegister(context: ActorContext[Command], nodeParams: NodeParams, paymentInitiator: actor.ActorRef, watcher: ActorRef[ZmqWatcher.Command], register: actor.ActorRef, switchboard: actor.ActorRef, wallet: OnChainWallet, keyManager: SwapKeyManager, db: SwapsDb, data: Set[SwapData]) {
+private class SwapRegister(context: ActorContext[Command], nodeParams: NodeParams, paymentInitiator: actor.ActorRef, watcher: ActorRef[ZmqWatcher.Command], register: actor.ActorRef, switchboard: actor.ActorRef, wallet: OnChainWallet, keyManager: SwapKeyManager, db: SwapsDb) {
   import SwapRegister._
 
-  case class SwapEntry(shortChannelId: String, swap: ActorRef[SwapCommands.SwapCommand])
+  private case class SwapEntry(shortChannelId: String, swap: ActorRef[SwapCommands.SwapCommand])
 
   private def myReceive[B <: Command : ClassTag](stateName: String)(f: B => Behavior[Command]): Behavior[Command] =
     Behaviors.receiveMessage[Command] {
       case m: B => f(m)
       case m =>
-        // m.replyTo ! Unhandled(stateName, m.getClass.getSimpleName)
         context.log.error(s"received unhandled message while in state $stateName of ${m.getClass.getSimpleName}")
         Behaviors.same
     }
@@ -85,38 +87,43 @@ private class SwapRegister(context: ActorContext[Command], nodeParams: NodeParam
     context.messageAdapter[UnknownMessageReceived](WrappedUnknownMessageReceived)
   }
 
-  private def spawnSwap(swapRole: SwapRole, remoteNodeId: PublicKey, scid: String) = {
+  private def spawnSwap(swapRole: SwapRole, remoteNodeId: PublicKey, remotePeer: actor.ActorRef, scid: String) = {
     swapRole match {
       // swap maker is safe to resume because an opening transaction will only be funded once
-      case SwapRole.Maker => context.spawn(Behaviors.supervise(SwapMaker(remoteNodeId, nodeParams, watcher, switchboard, wallet, keyManager, db)).onFailure(typed.SupervisorStrategy.resume), "SwapMaker-" + scid)
+      case SwapRole.Maker => context.spawn(Behaviors.supervise(SwapMaker(remoteNodeId, nodeParams, watcher, remotePeer, wallet, keyManager, db)).onFailure(typed.SupervisorStrategy.resume), "SwapMaker-" + scid)
       // swap taker is safe to resume because a payment will only be sent once
-      case SwapRole.Taker => context.spawn(Behaviors.supervise(SwapTaker(remoteNodeId, nodeParams, paymentInitiator, watcher, switchboard, wallet, keyManager, db)).onFailure(typed.SupervisorStrategy.resume), "SwapTaker-" + scid)
+      case SwapRole.Taker => context.spawn(Behaviors.supervise(SwapTaker(remoteNodeId, nodeParams, paymentInitiator, watcher, remotePeer, wallet, keyManager, db)).onFailure(typed.SupervisorStrategy.resume), "SwapTaker-" + scid)
     }
   }
 
-  private def restoreSwap(checkPoint: SwapData): (String, SwapEntry) = {
-    val swap = spawnSwap(checkPoint.swapRole, checkPoint.remoteNodeId, checkPoint.scid)
+  private def restoreSwap(checkPoint: SwapData, remotePeer: actor.ActorRef): (String, SwapEntry) = {
+    val swap = spawnSwap(checkPoint.swapRole, checkPoint.remoteNodeId, remotePeer, checkPoint.scid)
     context.watchWith(swap, SwapTerminated(checkPoint.swapId))
     swap ! RestoreSwap(checkPoint)
     checkPoint.swapId -> SwapEntry(checkPoint.scid, swap.unsafeUpcast)
   }
 
-  private def channelInfoResultAdapter(context: ActorContext[Command], replyTo: ActorRef[Response], role: SwapRole, amount: Satoshi, shortChannelId: ShortChannelId): ActorRef[RES_GET_CHANNEL_INFO] =
+  private def channelInfoResultAdapter(replyTo: ActorRef[Response], role: SwapRole, amount: Satoshi, shortChannelId: ShortChannelId): ActorRef[RES_GET_CHANNEL_INFO] =
     context.messageAdapter[RES_GET_CHANNEL_INFO](r =>
-      SwapRequested(replyTo, role, amount, shortChannelId, Some(r.nodeId))
+      SwapRequested(replyTo, role, amount, shortChannelId, Some(r.nodeId), None)
     )
 
-  private def channelInfoFailureAdapter(context: ActorContext[Command], replyTo: ActorRef[Response]): ActorRef[Register.ForwardShortIdFailure[CMD_GET_CHANNEL_INFO]] =
-    context.messageAdapter[Register.ForwardShortIdFailure[CMD_GET_CHANNEL_INFO]]( f => ChannelInfoFailure(replyTo, f))
-
   private def fillRemoteNodeId(replyTo: ActorRef[Response], role: SwapRole, amount: Satoshi, shortChannelId: ShortChannelId): Unit = {
-    register ! Register.ForwardShortId(channelInfoFailureAdapter(context, replyTo), shortChannelId, CMD_GET_CHANNEL_INFO(channelInfoResultAdapter(context, replyTo, role, amount, shortChannelId).toClassic))
+    register ! Register.ForwardShortId(context.messageAdapter[Register.ForwardShortIdFailure[CMD_GET_CHANNEL_INFO]](f => ChannelInfoFailure(replyTo, shortChannelId, f)),
+      shortChannelId, CMD_GET_CHANNEL_INFO(channelInfoResultAdapter(replyTo, role, amount, shortChannelId).toClassic))
   }
 
-  private def initiateSwap(replyTo: ActorRef[Response], amount: Satoshi, remoteNodeId: PublicKey, shortChannelId: ShortChannelId, swapRole: SwapRole): (String, SwapEntry) = {
+  private def fillRemotePeer(replyTo: ActorRef[Response], role: SwapRole, amount: Satoshi, shortChannelId: ShortChannelId, remoteNodeId: PublicKey): Unit = {
+    switchboard ! Switchboard.GetPeerInfo(context.messageAdapter[Peer.PeerInfoResponse] {
+      case f: Peer.PeerNotFound => PeerInfoFailure(Some(replyTo), shortChannelId.toCoordinatesString, f.nodeId)
+      case i: Peer.PeerInfo => SwapRequested(replyTo, role, amount, shortChannelId, Some(remoteNodeId), Some(i.peer))
+    }, remoteNodeId)
+  }
+
+  private def initiateSwap(replyTo: ActorRef[Response], amount: Satoshi, remoteNodeId: PublicKey, remotePeer: actor.ActorRef, shortChannelId: ShortChannelId, swapRole: SwapRole): (String, SwapEntry) = {
     // TODO: check that new random swapId does not already exist in db?
     val swapId = randomBytes32().toHex
-    val swap = spawnSwap(swapRole, remoteNodeId, shortChannelId.toCoordinatesString)
+    val swap = spawnSwap(swapRole, remoteNodeId, remotePeer, shortChannelId.toCoordinatesString)
     context.watchWith(swap, SwapTerminated(swapId))
     swapRole match {
       case SwapRole.Taker => swap ! StartSwapOutSender(amount, swapId, shortChannelId)
@@ -126,11 +133,11 @@ private class SwapRegister(context: ActorContext[Command], nodeParams: NodeParam
     swapId -> SwapEntry(shortChannelId.toCoordinatesString, swap.unsafeUpcast)
   }
 
-  private def receiveSwap(remoteNodeId: PublicKey, request: SwapRequest): (String, SwapEntry) = {
+  private def receiveSwap(remotePeer: actor.ActorRef, remoteNodeId: PublicKey, request: SwapRequest): (String, SwapEntry) = {
     val swap = spawnSwap(request match {
       case _: SwapInRequest => SwapRole.Taker
       case _: SwapOutRequest => SwapRole.Maker
-    }, remoteNodeId, request.scid)
+    }, remoteNodeId, remotePeer, request.scid)
 
     context.watchWith(swap, SwapTerminated(request.swapId))
     request match {
@@ -144,23 +151,39 @@ private class SwapRegister(context: ActorContext[Command], nodeParams: NodeParam
     peer ! RelayUnknownMessage(makeUnknownMessage(CancelSwap(swapId, reason)))
   }
 
-  private def start: Behavior[Command] = {
-    val swaps = data.map {
-      restoreSwap
-    }.toMap
-    registering(swaps)
+  private def restoring(data: Seq[SwapData], swaps: Map[String, SwapEntry]): Behavior[Command] = {
+    data.headOption match {
+      case Some(swapData) =>
+        switchboard ! Switchboard.GetPeerInfo(context.messageAdapter[Peer.PeerInfoResponse] {
+          case f: Peer.PeerNotFound => PeerInfoFailure(None, swapData.scid, f.nodeId)
+          case i: Peer.PeerInfo => RestoreSwapWithPeer(swapData, i.peer)
+        }, swapData.remoteNodeId)
+        myReceive[RestoringMessages]("restoring") {
+          case PeerInfoFailure(_, _, _) =>
+            context.log.error(s"could not restore swap ${swapData.swapId} with peer ${swapData.remoteNodeId}: peer not found")
+            restoring(data.tail, swaps)
+          case RestoreSwapWithPeer(swapData, peer) =>
+            val (swapId, swapEntry) = restoreSwap(swapData, peer)
+            restoring(data.tail, swaps + (swapId -> swapEntry))
+        }
+      case None => registering(swaps)
+    }
   }
 
   private def registering(swaps: Map[String, SwapEntry]): Behavior[Command] = {
     watchForUnknownMessage(watch = true)(context)
     myReceive[RegisteringMessages]("registering") {
-      case swapRequested: SwapRequested if swaps.exists( p => p._2.shortChannelId == swapRequested.shortChannelId.toCoordinatesString ) =>
-        swapRequested.replyTo ! SwapExistsForChannel(swapRequested.shortChannelId.toCoordinatesString)
+      case SwapRequested(replyTo, _, _, shortChannelId, _, _) if swaps.exists(p => p._2.shortChannelId == shortChannelId.toCoordinatesString) =>
+        replyTo ! SwapExistsForChannel(shortChannelId)
         Behaviors.same
-      case SwapRequested(replyTo, role, amount, shortChannelId, None) => fillRemoteNodeId(replyTo, role, amount, shortChannelId)
+      case SwapRequested(replyTo, role, amount, shortChannelId, None, _) =>
+        fillRemoteNodeId(replyTo, role, amount, shortChannelId)
         Behaviors.same
-      case SwapRequested(replyTo, role, amount, shortChannelId, Some(remoteNodeId)) =>
-        registering(swaps + initiateSwap(replyTo, amount, remoteNodeId, shortChannelId, role))
+      case SwapRequested(replyTo, role, amount, shortChannelId, Some(remoteNodeId), None) =>
+        fillRemotePeer(replyTo, role, amount, shortChannelId, remoteNodeId)
+        Behaviors.same
+      case SwapRequested(replyTo, role, amount, shortChannelId, Some(remoteNodeId), Some(remotePeer)) =>
+        registering(swaps + initiateSwap(replyTo, amount, remoteNodeId, remotePeer, shortChannelId, role))
       case ListPendingSwaps(replyTo: ActorRef[Iterable[Status]]) =>
         val aggregator = context.spawn(StatusAggregator(swaps.size, replyTo), s"status-aggregator")
         swaps.values.foreach(e => e.swap ! GetStatus(aggregator))
@@ -172,14 +195,20 @@ private class SwapRegister(context: ActorContext[Command], nodeParams: NodeParam
         }
         Behaviors.same
       case SwapTerminated(swapId) =>
-        db.restore().collectFirst({
-          case checkPoint if checkPoint.swapId == swapId =>
-            context.log.error(s"Swap $swapId stopped prematurely after saving a checkpoint, but before recording a result.")
-            restoreSwap(checkPoint)
-        }) match {
-          case None => registering (swaps - swapId)
-          case Some (restoredSwap) => registering (swaps + restoredSwap)
+        db.restore().find({ d => d.swapId == swapId }) match {
+          case None => registering(swaps - swapId)
+          case Some(d) =>
+            context.log.error(s"Swap ${d.swapId} stopped prematurely after saving a checkpoint, but before recording a result.")
+            // restore swap if stopped prematurely
+            switchboard ! Switchboard.GetPeerInfo(context.messageAdapter[Peer.PeerInfoResponse] {
+              case f: Peer.PeerNotFound => PeerInfoFailure(None, d.scid, f.nodeId)
+              case i: Peer.PeerInfo => RestoreSwapWithPeer(d, i.peer)
+            }, d.remoteNodeId)
+            registering(swaps)
         }
+      case RestoreSwapWithPeer(swapData, peer) =>
+        val (swapId, swapEntry) = restoreSwap(swapData, peer)
+        registering(swaps + (swapId -> swapEntry))
       case WrappedUnknownMessageReceived(unknownMessageReceived) =>
         if (PeerSwapPlugin.peerSwapTags.contains(unknownMessageReceived.message.tag)) {
           peerSwapMessageCodec.decode(unknownMessageCodec.encode(unknownMessageReceived.message).require) match {
@@ -193,7 +222,7 @@ private class SwapRegister(context: ActorContext[Command], nodeParams: NodeParam
                 cancelSwap(unknownMessageReceived.peer, swapRequest.swapId, "Previously used swap id.")
                 Behaviors.same
               case swapRequest: SwapRequest =>
-                registering(swaps + receiveSwap(unknownMessageReceived.nodeId, swapRequest))
+                registering(swaps + receiveSwap(unknownMessageReceived.peer, unknownMessageReceived.nodeId, swapRequest))
               case msg: HasSwapId => swaps.get(msg.swapId) match {
                 case Some(e) => e.swap ! SwapMessageReceived(msg)
                   Behaviors.same
@@ -208,9 +237,13 @@ private class SwapRegister(context: ActorContext[Command], nodeParams: NodeParam
           // unknown message received without a peerswap message tag
           Behaviors.same
         }
-      case ChannelInfoFailure(replyTo, failure) => replyTo ! CreateFailed("", failure.toString)
+      case ChannelInfoFailure(replyTo, shortChannelId, failure) =>
+        replyTo ! ChannelInfoNotFound(shortChannelId, failure)
+        Behaviors.same
+      case PeerInfoFailure(replyTo, scid, remoteNodeId) =>
+        context.log.error(s"could not restore swap for channel $scid with peer $remoteNodeId: peer not found")
+        if (replyTo.isDefined) replyTo.get ! PeerInfoNotFound(scid, remoteNodeId)
         Behaviors.same
     }
   }
-
 }

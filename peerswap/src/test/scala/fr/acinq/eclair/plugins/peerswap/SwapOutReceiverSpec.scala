@@ -28,7 +28,7 @@ import fr.acinq.eclair.blockchain.bitcoind.ZmqWatcher
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.blockchain.{DummyOnChainWallet, OnChainWallet}
 import fr.acinq.eclair.channel.DATA_NORMAL
-import fr.acinq.eclair.io.Switchboard.ForwardUnknownMessage
+import fr.acinq.eclair.io.Peer.RelayUnknownMessage
 import fr.acinq.eclair.payment.{Bolt11Invoice, PaymentReceived}
 import fr.acinq.eclair.plugins.peerswap.SwapCommands._
 import fr.acinq.eclair.plugins.peerswap.SwapEvents.{ClaimByInvoicePaid, SwapEvent, TransactionPublished}
@@ -75,8 +75,8 @@ case class SwapOutReceiverSpec() extends ScalaTestWithActorTestKit(ConfigFactory
   val request: SwapOutRequest = SwapOutRequest(protocolVersion, swapId, noAsset, network, shortChannelId.toString, amount.toLong, takerPubkey.toHex)
   val remoteNodeId: PublicKey = TestConstants.Alice.nodeParams.nodeId
 
-  def expectSwapMessage[B](switchboard: TestProbe[Any]): B = {
-    val unknownMessage = switchboard.expectMessageType[ForwardUnknownMessage].msg
+  def expectSwapMessage[B](remotePeer: TestProbe[Any]): B = {
+    val unknownMessage = remotePeer.expectMessageType[RelayUnknownMessage].unknownMessage
     val encoded = LightningMessageCodecs.unknownMessageCodec.encode(unknownMessage).require.toByteVector
     peerSwapMessageCodec.decode(encoded.toBitVector).require.value.asInstanceOf[B]
   }
@@ -86,7 +86,7 @@ case class SwapOutReceiverSpec() extends ScalaTestWithActorTestKit(ConfigFactory
     val paymentHandler = testKit.createTestProbe[Any]()
     val relayer = testKit.createTestProbe[Any]()
     val router = testKit.createTestProbe[Any]()
-    val switchboard = testKit.createTestProbe[Any]()
+    val remotePeer = testKit.createTestProbe[Any]()
     val paymentInitiator = testKit.createTestProbe[Any]()
 
     val wallet = new DummyOnChainWallet()
@@ -98,9 +98,9 @@ case class SwapOutReceiverSpec() extends ScalaTestWithActorTestKit(ConfigFactory
     // subscribe to notification events from SwapInReceiver when a payment is successfully received or claimed via coop or csv
     testKit.system.eventStream ! Subscribe[SwapEvent](swapEvents.ref)
 
-    val swapOutReceiver = testKit.spawn(SwapMaker(remoteNodeId, TestConstants.Alice.nodeParams, watcher.ref, switchboard.ref.toClassic, wallet, keyManager, db), "swap-out-receiver")
+    val swapOutReceiver = testKit.spawn(SwapMaker(remoteNodeId, TestConstants.Alice.nodeParams, watcher.ref, remotePeer.ref.toClassic, wallet, keyManager, db), "swap-out-receiver")
 
-    withFixture(test.toNoArgTest(FixtureParam(swapOutReceiver, userCli, switchboard, relayer, router, paymentInitiator, paymentHandler, TestConstants.Bob.nodeParams, watcher, wallet, swapEvents, remoteNodeId)))
+    withFixture(test.toNoArgTest(FixtureParam(swapOutReceiver, userCli, remotePeer, relayer, router, paymentInitiator, paymentHandler, TestConstants.Bob.nodeParams, watcher, wallet, swapEvents, remoteNodeId)))
   }
 
   case class FixtureParam(swapOutReceiver: ActorRef[SwapCommands.SwapCommand], userCli: TestProbe[Status], switchboard: TestProbe[Any], relayer: TestProbe[Any], router: TestProbe[Any], paymentInitiator: TestProbe[Any], paymentHandler: TestProbe[Any], nodeParams: NodeParams, watcher: TestProbe[ZmqWatcher.Command], wallet: OnChainWallet, swapEvents: TestProbe[SwapEvent], remoteNodeId: PublicKey)

@@ -18,7 +18,6 @@ package fr.acinq.eclair.plugins.peerswap
 
 import akka.actor.testkit.typed.scaladsl.{ScalaTestWithActorTestKit, TestProbe}
 import akka.actor.typed.eventstream.EventStream.{Publish, Subscribe}
-import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.scaladsl.adapter._
 import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
@@ -33,8 +32,8 @@ import fr.acinq.eclair.channel.{CMD_GET_CHANNEL_INFO, DATA_NORMAL, NORMAL, RES_G
 import fr.acinq.eclair.db.OutgoingPaymentStatus.Pending
 import fr.acinq.eclair.db.{OutgoingPayment, PaymentType}
 import fr.acinq.eclair.io.Peer.RelayUnknownMessage
-import fr.acinq.eclair.io.Switchboard.ForwardUnknownMessage
-import fr.acinq.eclair.io.UnknownMessageReceived
+import fr.acinq.eclair.io.Switchboard.GetPeerInfo
+import fr.acinq.eclair.io.{Peer, UnknownMessageReceived}
 import fr.acinq.eclair.payment.{Bolt11Invoice, PaymentReceived, PaymentSent}
 import fr.acinq.eclair.plugins.peerswap.SwapEvents.{ClaimByInvoiceConfirmed, ClaimByInvoicePaid, SwapEvent, TransactionPublished}
 import fr.acinq.eclair.plugins.peerswap.SwapHelpers.makeUnknownMessage
@@ -86,7 +85,6 @@ class SwapRegisterSpec extends ScalaTestWithActorTestKit(ConfigFactory.load("app
   val swapInAgreement: SwapInAgreement = SwapInAgreement(protocolVersion, swapId(0), bobPubkey(swapId(0)).toString(), premium)
   val swapOutRequest: SwapOutRequest = SwapOutRequest(protocolVersion, swapId(1), noAsset, network, shortChannelId.toString, amount.toLong, bobPubkey(swapId(1)).toString())
   val swapOutAgreement: SwapOutAgreement = SwapOutAgreement(protocolVersion, swapId(1), bobPubkey(swapId(1)).toString(), feeInvoice.toString)
-  val remoteNodeId: PublicKey = TestConstants.Alice.nodeParams.nodeId
 
   def paymentPreimage(index: Int): ByteVector32 = index match {
     case 0 => ByteVector32.Zeroes
@@ -106,15 +104,15 @@ class SwapRegisterSpec extends ScalaTestWithActorTestKit(ConfigFactory.load("app
   def openingTxBroadcasted(index: Int): OpeningTxBroadcasted = OpeningTxBroadcasted(swapId(index), invoice(index).toString, txId, scriptOut, blindingKey)
   def makePluginMessage(peer: TestProbe[Any], message: HasSwapId): WrappedUnknownMessageReceived = WrappedUnknownMessageReceived(UnknownMessageReceived(peer.ref.toClassic, alicePubkey(""), makeUnknownMessage(message), null))
 
-  def expectSwapMessage[B](switchboard: TestProbe[Any]): B = {
-    val unknownMessage = switchboard.expectMessageType[ForwardUnknownMessage].msg
-    val encoded = LightningMessageCodecs.unknownMessageCodec.encode(unknownMessage).require.toByteVector
+  def expectSwapMessage[B](remotePeer: TestProbe[Any]): B = {
+    val unknownMessage = remotePeer.expectMessageType[RelayUnknownMessage]
+    val encoded = LightningMessageCodecs.unknownMessageCodec.encode(unknownMessage.unknownMessage).require.toByteVector
     peerSwapMessageCodec.decode(encoded.toBitVector).require.value.asInstanceOf[B]
   }
 
   def expectCancelSwap(peer: TestProbe[Any]): CancelSwap = {
-    val unknownMessage = peer.expectMessageType[RelayUnknownMessage].unknownMessage
-    val encoded = LightningMessageCodecs.unknownMessageCodec.encode(unknownMessage).require.toByteVector
+    val unknownMessage = peer.expectMessageType[RelayUnknownMessage]
+    val encoded = LightningMessageCodecs.unknownMessageCodec.encode(unknownMessage.unknownMessage).require.toByteVector
     peerSwapMessageCodec.decode(encoded.toBitVector).require.value.asInstanceOf[CancelSwap]
   }
 
@@ -123,6 +121,7 @@ class SwapRegisterSpec extends ScalaTestWithActorTestKit(ConfigFactory.load("app
     val swapEvents = testKit.createTestProbe[SwapEvent]()
     val register = testKit.createTestProbe[Any]()
     val switchboard = testKit.createTestProbe[Any]()
+    val remotePeer = testKit.createTestProbe[Any]()
     val paymentHandler = testKit.createTestProbe[Any]()
     val wallet = new DummyOnChainWallet() {
       override def onChainBalance()(implicit ec: ExecutionContext): Future[OnChainBalance] = Future.successful(OnChainBalance(6930 sat, 0 sat))
@@ -133,16 +132,16 @@ class SwapRegisterSpec extends ScalaTestWithActorTestKit(ConfigFactory.load("app
     // subscribe to notification events from SwapInSender when a payment is successfully received or claimed via coop or csv
     testKit.system.eventStream ! Subscribe[SwapEvent](swapEvents.ref)
 
-    withFixture(test.toNoArgTest(FixtureParam(userCli, swapEvents, register, paymentHandler, wallet, watcher, switchboard, peer)))
+    withFixture(test.toNoArgTest(FixtureParam(userCli, swapEvents, register, paymentHandler, wallet, watcher, switchboard, remotePeer, peer)))
   }
 
-  case class FixtureParam(userCli: TestProbe[Response], swapEvents: TestProbe[SwapEvent], register: TestProbe[Any], paymentHandler: TestProbe[Any], wallet: OnChainWallet, watcher: TestProbe[Any], switchboard: TestProbe[Any], peer: TestProbe[Any])
+  case class FixtureParam(userCli: TestProbe[Response], swapEvents: TestProbe[SwapEvent], register: TestProbe[Any], paymentHandler: TestProbe[Any], wallet: OnChainWallet, watcher: TestProbe[Any],switchboard: TestProbe[Any], remotePeer: TestProbe[Any], peer: TestProbe[Any])
 
   test("restore the swap register from the database") { f =>
     import f._
 
-    val savedData: Set[SwapData] = Set(SwapData(swapInRequest, swapInAgreement, invoice(0), openingTxBroadcasted(0), swapRole = SwapRole.Maker, isInitiator = true, remoteNodeId),
-      SwapData(swapOutRequest, swapOutAgreement, invoice(1), openingTxBroadcasted(1), swapRole = SwapRole.Taker, isInitiator = true, remoteNodeId))
+    val savedData: Seq[SwapData] = Seq(SwapData(swapInRequest, swapInAgreement, invoice(0), openingTxBroadcasted(0), swapRole = SwapRole.Maker, isInitiator = true, bobPubkey(swapId(0))),
+      SwapData(swapOutRequest, swapOutAgreement, invoice(1), openingTxBroadcasted(1), swapRole = SwapRole.Taker, isInitiator = true, alicePubkey(swapId(1))))
     val nodeParams = TestConstants.Alice.nodeParams
 
     // add pending outgoing payment to the payments databases
@@ -151,6 +150,10 @@ class SwapRegisterSpec extends ScalaTestWithActorTestKit(ConfigFactory.load("app
     assert(nodeParams.db.payments.listOutgoingPayments(invoice(1).paymentHash).nonEmpty)
 
     val swapRegister = testKit.spawn(SwapRegister(nodeParams, paymentHandler.ref.toClassic, watcher.ref, register.ref.toClassic, switchboard.ref.toClassic, wallet, aliceKeyManager, aliceDb, savedData), "SwapRegister")
+
+    // retrieve peer ref for both restored swaps
+    switchboard.expectMessageType[GetPeerInfo].replyTo ! Peer.PeerInfo(peer.ref.toClassic, alicePubkey(swapId(0)), Peer.CONNECTED, None, Set())
+    switchboard.expectMessageType[GetPeerInfo].replyTo ! Peer.PeerInfo(peer.ref.toClassic, bobPubkey(swapId(1)), Peer.CONNECTED, None, Set())
 
     // wait for SwapMaker and SwapTaker to subscribe to PaymentEventReceived messages
     swapEvents.expectNoMessage()
@@ -185,18 +188,19 @@ class SwapRegisterSpec extends ScalaTestWithActorTestKit(ConfigFactory.load("app
     import f._
 
     // initialize SwapRegister
-    val swapRegister = testKit.spawn(SwapRegister(TestConstants.Alice.nodeParams, paymentHandler.ref.toClassic, watcher.ref, register.ref.toClassic, switchboard.ref.toClassic, wallet, aliceKeyManager, aliceDb, Set()), "SwapRegister")
+    val swapRegister = testKit.spawn(SwapRegister(TestConstants.Alice.nodeParams, paymentHandler.ref.toClassic, watcher.ref, register.ref.toClassic, switchboard.ref.toClassic, wallet, aliceKeyManager, aliceDb, Seq()), "SwapRegister")
     swapEvents.expectNoMessage()
     userCli.expectNoMessage()
 
     // User:SwapInRequested -> SwapInRegister
-    swapRegister ! SwapRequested(userCli.ref, Maker, amount, shortChannelId, None)
-    register.expectMessageType[ForwardShortId[CMD_GET_CHANNEL_INFO]].message.replyTo ! RES_GET_CHANNEL_INFO(remoteNodeId, channelId, NORMAL, ChannelCodecsSpec.normal)
-    val swapId = userCli.expectMessageType[SwapOpened].swapId
+    swapRegister ! SwapRequested(userCli.ref, Maker, amount, shortChannelId, None, None)
+    register.expectMessageType[ForwardShortId[CMD_GET_CHANNEL_INFO]].message.replyTo ! RES_GET_CHANNEL_INFO(bobPubkey(swapId(0)), channelId, NORMAL, ChannelCodecsSpec.normal)
+    switchboard.expectMessageType[GetPeerInfo].replyTo ! Peer.PeerInfo(remotePeer.ref.toClassic, bobPubkey(swapId(0)), Peer.CONNECTED, None, Set())
+    val swapOpened = userCli.expectMessageType[SwapOpened]
 
     // Alice:SwapInRequest -> Bob
-    val swapInRequest = expectSwapMessage[SwapInRequest](switchboard)
-    assert(swapId === swapInRequest.swapId)
+    val swapInRequest = expectSwapMessage[SwapInRequest](remotePeer)
+    assert(swapOpened.swapId == swapInRequest.swapId)
 
     // Alice's database has no items before the opening tx is published
     assert(aliceDb.list().isEmpty)
@@ -213,7 +217,7 @@ class SwapRegisterSpec extends ScalaTestWithActorTestKit(ConfigFactory.load("app
     swapEvents.expectMessageType[TransactionPublished]
 
     // Alice:OpeningTxBroadcasted -> Bob
-    val openingTxBroadcasted = expectSwapMessage[OpeningTxBroadcasted](switchboard)
+    val openingTxBroadcasted = expectSwapMessage[OpeningTxBroadcasted](remotePeer)
 
     // Bob: payment(paymentHash) -> Alice
     val paymentHash = Bolt11Invoice.fromString(openingTxBroadcasted.payreq).get.paymentHash
@@ -221,7 +225,7 @@ class SwapRegisterSpec extends ScalaTestWithActorTestKit(ConfigFactory.load("app
     testKit.system.eventStream ! Publish(paymentReceived)
 
     // SwapRegister received notice that SwapInSender completed
-    assert(swapEvents.expectMessageType[ClaimByInvoicePaid].swapId === swapId)
+    assert(swapEvents.expectMessageType[ClaimByInvoicePaid].swapId == swapOpened.swapId)
 
     testKit.stop(swapRegister)
   }
@@ -230,21 +234,22 @@ class SwapRegisterSpec extends ScalaTestWithActorTestKit(ConfigFactory.load("app
     import f._
 
     // initialize SwapRegister
-    val swapRegister = testKit.spawn(SwapRegister(TestConstants.Alice.nodeParams, paymentHandler.ref.toClassic, watcher.ref, register.ref.toClassic, switchboard.ref.toClassic, wallet, aliceKeyManager, aliceDb, Set()), "SwapRegister")
+    val swapRegister = testKit.spawn(SwapRegister(TestConstants.Alice.nodeParams, paymentHandler.ref.toClassic, watcher.ref, register.ref.toClassic, switchboard.ref.toClassic, wallet, aliceKeyManager, aliceDb, Seq()), "SwapRegister")
 
     // first swap request succeeds
-    swapRegister ! SwapRequested(userCli.ref, Maker, amount, shortChannelId, None)
-    register.expectMessageType[ForwardShortId[CMD_GET_CHANNEL_INFO]].message.replyTo ! RES_GET_CHANNEL_INFO(remoteNodeId, channelId, NORMAL, ChannelCodecsSpec.normal)
+    swapRegister ! SwapRequested(userCli.ref, Maker, amount, shortChannelId, None, None)
+    register.expectMessageType[ForwardShortId[CMD_GET_CHANNEL_INFO]].message.replyTo ! RES_GET_CHANNEL_INFO(bobPubkey(swapId(0)), channelId, NORMAL, ChannelCodecsSpec.normal)
+    switchboard.expectMessageType[GetPeerInfo].replyTo ! Peer.PeerInfo(remotePeer.ref.toClassic, bobPubkey(swapId(0)), Peer.CONNECTED, None, Set())
 
     val response = userCli.expectMessageType[SwapOpened]
-    val request = expectSwapMessage[SwapInRequest](switchboard)
+    val request = expectSwapMessage[SwapInRequest](remotePeer)
     assert(response.swapId === request.swapId)
 
     // swap requests from the user with the same channel id should fail
-    swapRegister ! SwapRequested(userCli.ref, Maker, amount, shortChannelId, None)
+    swapRegister ! SwapRequested(userCli.ref, Maker, amount, shortChannelId, None, None)
     userCli.expectMessageType[SwapExistsForChannel]
 
-    swapRegister ! SwapRequested(userCli.ref, Taker, amount, shortChannelId, None)
+    swapRegister ! SwapRequested(userCli.ref, Taker, amount, shortChannelId, None, None)
     userCli.expectMessageType[SwapExistsForChannel]
 
     // swap requests from a peer with the same channel id should fail
@@ -258,8 +263,8 @@ class SwapRegisterSpec extends ScalaTestWithActorTestKit(ConfigFactory.load("app
   test("list the active swaps in the register") { f =>
     import f._
 
-    val savedData: Set[SwapData] = Set(SwapData(swapInRequest, swapInAgreement, invoice(0), openingTxBroadcasted(0), swapRole = SwapRole.Maker, isInitiator = true, remoteNodeId),
-      SwapData(swapOutRequest, swapOutAgreement, invoice(1), openingTxBroadcasted(1), swapRole = SwapRole.Taker, isInitiator = true, remoteNodeId))
+    val savedData: Seq[SwapData] = Seq(SwapData(swapInRequest, swapInAgreement, invoice(0), openingTxBroadcasted(0), swapRole = SwapRole.Maker, isInitiator = true, bobPubkey(swapId(0))),
+      SwapData(swapOutRequest, swapOutAgreement, invoice(1), openingTxBroadcasted(1), swapRole = SwapRole.Taker, isInitiator = true, alicePubkey(swapId(1))))
     val nodeParams = TestConstants.Alice.nodeParams
 
     // add pending outgoing payment to the payments databases
@@ -268,6 +273,12 @@ class SwapRegisterSpec extends ScalaTestWithActorTestKit(ConfigFactory.load("app
     assert(nodeParams.db.payments.listOutgoingPayments(invoice(1).paymentHash).nonEmpty)
 
     val swapRegister = testKit.spawn(SwapRegister(nodeParams, paymentHandler.ref.toClassic, watcher.ref, register.ref.toClassic, switchboard.ref.toClassic, wallet, aliceKeyManager, aliceDb, savedData), "SwapRegister")
+
+    // retrieve peer ref for both restored swaps
+    val getPeerInfo0: GetPeerInfo = switchboard.expectMessageType[GetPeerInfo]
+    getPeerInfo0.replyTo ! Peer.PeerInfo(peer.ref.toClassic, bobPubkey(swapId(0)), Peer.CONNECTED, None, Set())
+    val getPeerInfo1: GetPeerInfo = switchboard.expectMessageType[GetPeerInfo]
+    getPeerInfo1.replyTo ! Peer.PeerInfo(peer.ref.toClassic, alicePubkey(swapId(1)), Peer.CONNECTED, None, Set())
 
     val listCli = TestProbe[Iterable[Response]]()
     swapRegister ! ListPendingSwaps(listCli.ref)
