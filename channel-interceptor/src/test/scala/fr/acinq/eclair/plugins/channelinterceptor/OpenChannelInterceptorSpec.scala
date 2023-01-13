@@ -42,11 +42,11 @@ class OpenChannelInterceptorSpec extends ScalaTestWithActorTestKit(ConfigFactory
     val peerProbe = TestProbe[InterceptOpenChannelResponse]()
 
     // approve and continue single funded open channel
-    openChannelInterceptor ! InterceptOpenChannelReceived(peerProbe.ref, Left(openChannel), temporaryChannelId, localParams, fundingAmount)
+    openChannelInterceptor ! InterceptOpenChannelReceived(peerProbe.ref, Left(openChannel), temporaryChannelId, localParams)
     assert(peerProbe.expectMessageType[AcceptOpenChannel] == AcceptOpenChannel(temporaryChannelId, localParams))
 
     // fail request to open dual funded channel
-    openChannelInterceptor ! InterceptOpenChannelReceived(peerProbe.ref, Right(openDualChannel), temporaryChannelId, localParams, fundingAmount)
+    openChannelInterceptor ! InterceptOpenChannelReceived(peerProbe.ref, Right(openDualChannel), temporaryChannelId, localParams)
     peerProbe.expectMessageType[RejectOpenChannel]
   }
 }
