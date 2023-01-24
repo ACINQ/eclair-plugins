@@ -19,11 +19,10 @@ package fr.acinq.eclair.plugins.channelinterceptor
 import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.actor.typed.{ActorRef, Behavior}
 import fr.acinq.bitcoin.scalacompat.Satoshi
-import fr.acinq.eclair.plugins.channelinterceptor.OpenChannelInterceptor.Command
 import fr.acinq.eclair.router.Router
 import fr.acinq.eclair.router.Router.{GetNode, PublicNode, UnknownNode}
 import fr.acinq.eclair.wire.protocol.Error
-import fr.acinq.eclair.{AcceptOpenChannel, InterceptOpenChannelReceived, RejectOpenChannel}
+import fr.acinq.eclair.{AcceptOpenChannel, InterceptOpenChannelCommand, InterceptOpenChannelReceived, RejectOpenChannel}
 
 /**
  * Intercept OpenChannel and OpenDualFundedChannel messages received by the node. Respond to the peer
@@ -35,29 +34,27 @@ import fr.acinq.eclair.{AcceptOpenChannel, InterceptOpenChannelReceived, RejectO
  * or too few public channels.
  */
 object OpenChannelInterceptor {
-
   // @formatter:off
-  sealed trait Command
-  case class WrappedInterceptOpenChannelReceived(interceptOpenChannelReceived: InterceptOpenChannelReceived) extends Command
-  private case class WrappedGetNodeResponse(interceptOpenChannelReceived: InterceptOpenChannelReceived, response: Router.GetNodeResponse) extends Command
+  private case class WrappedGetNodeResponse(interceptOpenChannelReceived: InterceptOpenChannelReceived, response: Router.GetNodeResponse) extends InterceptOpenChannelCommand
   // @formatter:on
 
   //
-  def apply(minActiveChannels: Int, minTotalCapacity: Satoshi, router: ActorRef[Any]): Behavior[Command] = {
+  def apply(minActiveChannels: Int, minTotalCapacity: Satoshi, router: ActorRef[Any]): Behavior[InterceptOpenChannelCommand] = {
     Behaviors.setup {
       context => {
         new OpenChannelInterceptor(minActiveChannels, minTotalCapacity, router, context).start()
       }
     }
   }
+
 }
 
-class OpenChannelInterceptor(minActiveChannels: Int, minTotalCapacity: Satoshi, router: ActorRef[Any], context: ActorContext[Command]) {
+class OpenChannelInterceptor(minActiveChannels: Int, minTotalCapacity: Satoshi, router: ActorRef[Any], context: ActorContext[InterceptOpenChannelCommand]) {
   import OpenChannelInterceptor._
 
-  private def start(): Behavior[Command] = {
-    Behaviors.receiveMessage[Command] {
-      case WrappedInterceptOpenChannelReceived(o) =>
+  private def start(): Behavior[InterceptOpenChannelCommand] = {
+    Behaviors.receiveMessage[InterceptOpenChannelCommand] {
+      case o: InterceptOpenChannelReceived =>
         val adapter = context.messageAdapter[Router.GetNodeResponse](nodeResponse => WrappedGetNodeResponse(o, nodeResponse))
         router ! GetNode(adapter, o.localParams.nodeId)
         Behaviors.same

@@ -28,10 +28,9 @@ import fr.acinq.eclair.channel.{ChannelFlags, LocalParams}
 import fr.acinq.eclair.io.OpenChannelInterceptor.OpenChannelNonInitiator
 import fr.acinq.eclair.io.Peer
 import fr.acinq.eclair.io.Peer.ChannelId
-import fr.acinq.eclair.plugins.channelinterceptor.OpenChannelInterceptor.WrappedInterceptOpenChannelReceived
 import fr.acinq.eclair.router.Router.{GetNode, PublicNode, UnknownNode}
 import fr.acinq.eclair.wire.protocol._
-import fr.acinq.eclair.{AcceptOpenChannel, CltvExpiryDelta, Features, InterceptOpenChannelReceived, InterceptOpenChannelResponse, MilliSatoshiLong, RejectOpenChannel, TestConstants, TimestampSecondLong, UInt64, randomBytes32, randomBytes64, randomKey}
+import fr.acinq.eclair.{AcceptOpenChannel, CltvExpiryDelta, Features, InterceptOpenChannelCommand, InterceptOpenChannelReceived, InterceptOpenChannelResponse, MilliSatoshiLong, RejectOpenChannel, TestConstants, TimestampSecondLong, UInt64, randomBytes32, randomBytes64, randomKey}
 import org.scalatest.Outcome
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 import scodec.bits.ByteVector
@@ -52,7 +51,7 @@ class OpenChannelInterceptorSpec extends ScalaTestWithActorTestKit(ConfigFactory
   def publicKey(fill: Byte): PublicKey = PrivateKey(ByteVector.fill(32)(fill)).publicKey
   def announcement(nodeId: PublicKey): NodeAnnouncement = NodeAnnouncement(randomBytes64(), Features.empty, 1 unixsec, nodeId, Color(100.toByte, 200.toByte, 300.toByte), "node-alias", NodeAddress.fromParts("1.2.3.4", 42000).get :: Nil)
 
-  case class FixtureParam(router: TestProbe[Any], peer: TestProbe[InterceptOpenChannelResponse], openChannelInterceptor: ActorRef[OpenChannelInterceptor.Command])
+  case class FixtureParam(router: TestProbe[Any], peer: TestProbe[InterceptOpenChannelResponse], openChannelInterceptor: ActorRef[InterceptOpenChannelCommand])
 
   override def withFixture(test: OneArgTest): Outcome = {
     val router = TestProbe[Any]()
@@ -66,22 +65,22 @@ class OpenChannelInterceptorSpec extends ScalaTestWithActorTestKit(ConfigFactory
     import f._
 
     // approve and continue request from public peer
-    openChannelInterceptor ! WrappedInterceptOpenChannelReceived(InterceptOpenChannelReceived(peer.ref, openChannelNonInitiator, temporaryChannelId, localParams))
+    openChannelInterceptor ! InterceptOpenChannelReceived(peer.ref, openChannelNonInitiator, temporaryChannelId, localParams)
     router.expectMessageType[GetNode].replyTo ! PublicNode(bobAnnouncement, 2, 10000 sat)
     assert(peer.expectMessageType[AcceptOpenChannel] == AcceptOpenChannel(temporaryChannelId, localParams))
 
     // fail request from private peer
-    openChannelInterceptor ! WrappedInterceptOpenChannelReceived(InterceptOpenChannelReceived(peer.ref, openChannelNonInitiator, temporaryChannelId, localParams))
+    openChannelInterceptor ! InterceptOpenChannelReceived(peer.ref, openChannelNonInitiator, temporaryChannelId, localParams)
     router.expectMessageType[GetNode].replyTo ! UnknownNode(remoteNodeId)
     assert(peer.expectMessageType[RejectOpenChannel].error.toAscii.contains("no public channels"))
 
     // fail request from public peer with too low capacity
-    openChannelInterceptor ! WrappedInterceptOpenChannelReceived(InterceptOpenChannelReceived(peer.ref, openChannelNonInitiator, temporaryChannelId, localParams))
+    openChannelInterceptor ! InterceptOpenChannelReceived(peer.ref, openChannelNonInitiator, temporaryChannelId, localParams)
     router.expectMessageType[GetNode].replyTo ! PublicNode(bobAnnouncement, 2, 9999 sat)
     assert(peer.expectMessageType[RejectOpenChannel].error.toAscii.contains("total capacity"))
 
     // fail request from public peer with too few channels
-    openChannelInterceptor ! WrappedInterceptOpenChannelReceived(InterceptOpenChannelReceived(peer.ref, openChannelNonInitiator, temporaryChannelId, localParams))
+    openChannelInterceptor ! InterceptOpenChannelReceived(peer.ref, openChannelNonInitiator, temporaryChannelId, localParams)
     router.expectMessageType[GetNode].replyTo ! PublicNode(bobAnnouncement, 1, 10000 sat)
     assert(peer.expectMessageType[RejectOpenChannel].error.toAscii.contains("active channels"))
   }
