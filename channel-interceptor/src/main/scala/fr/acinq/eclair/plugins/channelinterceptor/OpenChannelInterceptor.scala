@@ -16,41 +16,62 @@
 
 package fr.acinq.eclair.plugins.channelinterceptor
 
-import akka.actor.typed.Behavior
-import akka.actor.typed.scaladsl.Behaviors
-import fr.acinq.eclair.wire.protocol.{Error, OpenDualFundedChannel}
+import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
+import akka.actor.typed.{ActorRef, Behavior}
+import fr.acinq.bitcoin.scalacompat.Satoshi
+import fr.acinq.eclair.plugins.channelinterceptor.OpenChannelInterceptor.Command
+import fr.acinq.eclair.router.Router
+import fr.acinq.eclair.router.Router.{GetNode, PublicNode, UnknownNode}
+import fr.acinq.eclair.wire.protocol.Error
 import fr.acinq.eclair.{AcceptOpenChannel, InterceptOpenChannelReceived, RejectOpenChannel}
 
 /**
  * Intercept OpenChannel and OpenDualFundedChannel messages received by the node. Respond to the peer
- * that received the request with SpawnChannelNonInitiator to continue the open channel process,
+ * that received the request with AcceptOpenChannel to continue the open channel process,
  * optionally with modified local parameters, or fail the request by responding to the initiator
- * with an Error message.
+ * with RejectOpenChannel and an Error message.
+ *
+ * This example plugin rejects requests to open a channel from nodes with less than a minimum amount of total capacity
+ * or too few public channels.
  */
-
 object OpenChannelInterceptor {
 
-  def apply(): Behavior[InterceptOpenChannelReceived] = {
+  // @formatter:off
+  sealed trait Command
+  case class WrappedInterceptOpenChannelReceived(interceptOpenChannelReceived: InterceptOpenChannelReceived) extends Command
+  private case class WrappedGetNodeResponse(interceptOpenChannelReceived: InterceptOpenChannelReceived, response: Router.GetNodeResponse) extends Command
+  // @formatter:on
+
+  //
+  def apply(minActiveChannels: Int, minTotalCapacity: Satoshi, router: ActorRef[Any]): Behavior[Command] = {
     Behaviors.setup {
-      _ => new OpenChannelInterceptor().start()
+      context => {
+        new OpenChannelInterceptor(minActiveChannels, minTotalCapacity, router, context).start()
+      }
     }
   }
 }
 
-private class OpenChannelInterceptor() {
+class OpenChannelInterceptor(minActiveChannels: Int, minTotalCapacity: Satoshi, router: ActorRef[Any], context: ActorContext[Command]) {
+  import OpenChannelInterceptor._
 
-  private def start(): Behavior[InterceptOpenChannelReceived] = {
-
-    Behaviors.receiveMessage {
-      o: InterceptOpenChannelReceived =>
-        o.replyTo ! (o.open match {
-          case Left(_) =>
-            // example: accept all single funded open channel requests
-            AcceptOpenChannel(o.temporaryChannelId, o.localParams)
-          case Right(o: OpenDualFundedChannel) =>
-            // example: fail all dual funded open channel requests
-            RejectOpenChannel(o.temporaryChannelId, Error(o.temporaryChannelId, "dual funded channels are not supported"))
-        })
+  private def start(): Behavior[Command] = {
+    Behaviors.receiveMessage[Command] {
+      case WrappedInterceptOpenChannelReceived(o) =>
+        val adapter = context.messageAdapter[Router.GetNodeResponse](nodeResponse => WrappedGetNodeResponse(o, nodeResponse))
+        router ! GetNode(adapter, o.localParams.nodeId)
+        Behaviors.same
+      case WrappedGetNodeResponse(o, PublicNode(_, activeChannels, _)) if activeChannels < minActiveChannels =>
+        o.replyTo ! RejectOpenChannel(o.temporaryChannelId, Error(o.temporaryChannelId, s"rejected, less than $minActiveChannels active channels"))
+        Behaviors.same
+      case WrappedGetNodeResponse(o, PublicNode(_, _, totalCapacity)) if totalCapacity < minTotalCapacity =>
+        o.replyTo ! RejectOpenChannel(o.temporaryChannelId, Error(o.temporaryChannelId, s"rejected, less than $minTotalCapacity total capacity"))
+        Behaviors.same
+      case WrappedGetNodeResponse(o, UnknownNode(_)) =>
+        o.replyTo ! RejectOpenChannel(o.temporaryChannelId, Error(o.temporaryChannelId, s"rejected, no public channels"))
+        Behaviors.same
+      case WrappedGetNodeResponse(o, PublicNode(_, _, _)) =>
+        o.replyTo ! AcceptOpenChannel(o.temporaryChannelId, o.localParams)
         Behaviors.same
     }
   }
