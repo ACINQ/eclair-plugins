@@ -22,15 +22,15 @@ import akka.actor.typed.ActorRef
 import akka.actor.typed.scaladsl.adapter.ClassicActorRefOps
 import com.typesafe.config.ConfigFactory
 import fr.acinq.bitcoin.scalacompat.Crypto.{PrivateKey, PublicKey}
-import fr.acinq.bitcoin.scalacompat.{ByteVector32, Crypto, DeterministicWallet, Satoshi, SatoshiLong}
+import fr.acinq.bitcoin.scalacompat.{ByteVector32, Crypto, Satoshi, SatoshiLong}
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
-import fr.acinq.eclair.channel.{ChannelFlags, LocalParams}
-import fr.acinq.eclair.io.OpenChannelInterceptor.OpenChannelNonInitiator
+import fr.acinq.eclair.channel.ChannelFlags
+import fr.acinq.eclair.io.OpenChannelInterceptor.{DefaultParams, OpenChannelNonInitiator}
 import fr.acinq.eclair.io.Peer
 import fr.acinq.eclair.io.Peer.ChannelId
 import fr.acinq.eclair.router.Router.{GetNode, PublicNode, UnknownNode}
 import fr.acinq.eclair.wire.protocol._
-import fr.acinq.eclair.{AcceptOpenChannel, CltvExpiryDelta, Features, InterceptOpenChannelCommand, InterceptOpenChannelReceived, InterceptOpenChannelResponse, MilliSatoshiLong, RejectOpenChannel, TestConstants, TimestampSecondLong, UInt64, randomBytes32, randomBytes64, randomKey}
+import fr.acinq.eclair.{AcceptOpenChannel, CltvExpiryDelta, Features, InterceptOpenChannelCommand, InterceptOpenChannelReceived, InterceptOpenChannelResponse, MilliSatoshiLong, RejectOpenChannel, TestConstants, TimestampSecondLong, UInt64, randomBytes32, randomBytes64}
 import org.scalatest.Outcome
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 import scodec.bits.ByteVector
@@ -42,7 +42,7 @@ class OpenChannelInterceptorSpec extends ScalaTestWithActorTestKit(ConfigFactory
   val temporaryChannelId: ByteVector32 = ByteVector32.Zeroes
   val openChannel: OpenChannel = OpenChannel(ByteVector32.Zeroes, temporaryChannelId, fundingAmount, 0 msat, 1 sat, UInt64(1), 1 sat, 1 msat, FeeratePerKw(1 sat), CltvExpiryDelta(1), 1, publicKey, publicKey, publicKey, publicKey, publicKey, publicKey, ChannelFlags.Private)
   val openDualChannel: OpenDualFundedChannel = OpenDualFundedChannel(ByteVector32.Zeroes, ByteVector32.One, FeeratePerKw(5000 sat), FeeratePerKw(4000 sat), 250_000 sat, 500 sat, UInt64(50_000), 15 msat, CltvExpiryDelta(144), 483, 650_000, publicKey(1), publicKey(2), publicKey(3), publicKey(4), publicKey(5), publicKey(6), publicKey(7), ChannelFlags(true))
-  val localParams: LocalParams = LocalParams(randomKey().publicKey, DeterministicWallet.KeyPath(Seq(42L)), 1 sat, Long.MaxValue.msat, Some(500 sat), 1 msat, CltvExpiryDelta(144), 50, isInitiator = false, ByteVector.empty, None, Features.empty)
+  val defaultParams: DefaultParams = DefaultParams(100 sat, 100000 msat, 100 msat, CltvExpiryDelta(288), 10)
   val channels: Map[Peer.FinalChannelId, actor.ActorRef] = Map(Peer.FinalChannelId(randomBytes32()) -> system.classicSystem.deadLetters)
   val connectedData: Peer.ConnectedData = Peer.ConnectedData(NodeAddress.fromParts("1.2.3.4", 42000).get, system.classicSystem.deadLetters, Init(TestConstants.Alice.nodeParams.features.initFeatures()), Init(TestConstants.Bob.nodeParams.features.initFeatures()), channels.map { case (k: ChannelId, v) => (k, v) })
   val openChannelNonInitiator: OpenChannelNonInitiator = OpenChannelNonInitiator(remoteNodeId, Left(openChannel), temporaryChannelId, fundingAmount, openChannel.channelFlags, openChannel.channelType_opt, connectedData.localFeatures, connectedData.remoteFeatures, connectedData.peerConnection.toTyped)
@@ -65,22 +65,22 @@ class OpenChannelInterceptorSpec extends ScalaTestWithActorTestKit(ConfigFactory
     import f._
 
     // approve and continue request from public peer
-    openChannelInterceptor ! InterceptOpenChannelReceived(peer.ref, openChannelNonInitiator, temporaryChannelId, localParams)
+    openChannelInterceptor ! InterceptOpenChannelReceived(peer.ref, openChannelNonInitiator, temporaryChannelId, defaultParams)
     router.expectMessageType[GetNode].replyTo ! PublicNode(bobAnnouncement, 2, 10000 sat)
-    assert(peer.expectMessageType[AcceptOpenChannel] == AcceptOpenChannel(temporaryChannelId, localParams))
+    assert(peer.expectMessageType[AcceptOpenChannel] == AcceptOpenChannel(temporaryChannelId, defaultParams))
 
     // fail request from private peer
-    openChannelInterceptor ! InterceptOpenChannelReceived(peer.ref, openChannelNonInitiator, temporaryChannelId, localParams)
+    openChannelInterceptor ! InterceptOpenChannelReceived(peer.ref, openChannelNonInitiator, temporaryChannelId, defaultParams)
     router.expectMessageType[GetNode].replyTo ! UnknownNode(remoteNodeId)
     assert(peer.expectMessageType[RejectOpenChannel].error.toAscii.contains("no public channels"))
 
     // fail request from public peer with too low capacity
-    openChannelInterceptor ! InterceptOpenChannelReceived(peer.ref, openChannelNonInitiator, temporaryChannelId, localParams)
+    openChannelInterceptor ! InterceptOpenChannelReceived(peer.ref, openChannelNonInitiator, temporaryChannelId, defaultParams)
     router.expectMessageType[GetNode].replyTo ! PublicNode(bobAnnouncement, 2, 9999 sat)
     assert(peer.expectMessageType[RejectOpenChannel].error.toAscii.contains("total capacity"))
 
     // fail request from public peer with too few channels
-    openChannelInterceptor ! InterceptOpenChannelReceived(peer.ref, openChannelNonInitiator, temporaryChannelId, localParams)
+    openChannelInterceptor ! InterceptOpenChannelReceived(peer.ref, openChannelNonInitiator, temporaryChannelId, defaultParams)
     router.expectMessageType[GetNode].replyTo ! PublicNode(bobAnnouncement, 1, 10000 sat)
     assert(peer.expectMessageType[RejectOpenChannel].error.toAscii.contains("active channels"))
   }

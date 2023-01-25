@@ -56,7 +56,7 @@ class OpenChannelInterceptor(minActiveChannels: Int, minTotalCapacity: Satoshi, 
     Behaviors.receiveMessage[InterceptOpenChannelCommand] {
       case o: InterceptOpenChannelReceived =>
         val adapter = context.messageAdapter[Router.GetNodeResponse](nodeResponse => WrappedGetNodeResponse(o, nodeResponse))
-        router ! GetNode(adapter, o.localParams.nodeId)
+        router ! GetNode(adapter, o.openChannelNonInitiator.remoteNodeId)
         Behaviors.same
       case WrappedGetNodeResponse(o, PublicNode(_, activeChannels, _)) if activeChannels < minActiveChannels =>
         o.replyTo ! RejectOpenChannel(o.temporaryChannelId, Error(o.temporaryChannelId, s"rejected, less than $minActiveChannels active channels"))
@@ -68,7 +68,7 @@ class OpenChannelInterceptor(minActiveChannels: Int, minTotalCapacity: Satoshi, 
         o.replyTo ! RejectOpenChannel(o.temporaryChannelId, Error(o.temporaryChannelId, s"rejected, no public channels"))
         Behaviors.same
       case WrappedGetNodeResponse(o, PublicNode(_, _, _)) =>
-        o.replyTo ! AcceptOpenChannel(o.temporaryChannelId, o.localParams)
+        o.replyTo ! AcceptOpenChannel(o.temporaryChannelId, o.defaultParams)
         Behaviors.same
     }
   }
