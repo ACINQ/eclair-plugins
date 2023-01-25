@@ -20,9 +20,12 @@ import akka.actor.ActorSystem
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.scaladsl.adapter.{ClassicActorRefOps, ClassicActorSystemOps}
 import akka.actor.typed.{ActorRef, SupervisorStrategy}
-import fr.acinq.bitcoin.scalacompat.SatoshiLong
+import com.typesafe.config.{Config, ConfigFactory}
+import fr.acinq.bitcoin.scalacompat.Satoshi
 import fr.acinq.eclair.{InterceptOpenChannelCommand, InterceptOpenChannelPlugin, Kit, NodeParams, Plugin, PluginParams, Setup}
 import grizzled.slf4j.Logging
+
+import java.io.File
 
 
 /**
@@ -32,6 +35,7 @@ import grizzled.slf4j.Logging
 
 class OpenChannelInterceptorPlugin extends Plugin with Logging {
   var pluginKit: OpenChannelInterceptorKit = _
+  var config: Config = _
 
   override def params: PluginParams = new InterceptOpenChannelPlugin {
     // @formatter:off
@@ -41,13 +45,29 @@ class OpenChannelInterceptorPlugin extends Plugin with Logging {
   }
 
   override def onSetup(setup: Setup): Unit = {
+    // load or generate seed
+    config = loadConfiguration(setup.datadir)
   }
 
   override def onKit(kit: Kit): Unit = {
-    val openChannelInterceptor = kit.system.spawnAnonymous(Behaviors.supervise(OpenChannelInterceptor(10, 10000000 sat, kit.router.toTyped)).onFailure(SupervisorStrategy.restart))
+    val minActiveChannels = config.getInt("open-channel-interceptor.min-active-channels")
+    val minTotalCapacity = Satoshi(config.getLong("open-channel-interceptor.min-total-capacity"))
+    val openChannelInterceptor = kit.system.spawnAnonymous(Behaviors.supervise(OpenChannelInterceptor(minActiveChannels, minTotalCapacity, kit.router.toTyped)).onFailure(SupervisorStrategy.restart))
 
     pluginKit = OpenChannelInterceptorKit(kit.nodeParams, kit.system, openChannelInterceptor)
   }
+
+  /**
+   * Order of precedence for the configuration parameters:
+   * 1) Java environment variables (-D...)
+   * 2) Configuration file open_channel_interceptor.conf
+   * 3) Default values in reference.conf
+   */
+  private def loadConfiguration(datadir: File): Config =
+    ConfigFactory.systemProperties()
+      .withFallback(ConfigFactory.parseFile(new File(datadir, "open_channel_interceptor.conf")))
+      .withFallback(ConfigFactory.load())
+      .resolve()
 }
 
 case class OpenChannelInterceptorKit(nodeParams: NodeParams, system: ActorSystem, openChannelInterceptor: ActorRef[InterceptOpenChannelCommand])
