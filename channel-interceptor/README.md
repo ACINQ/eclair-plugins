@@ -1,6 +1,6 @@
 # Open Channel Interceptor plugin
 
-This plugin provides an example of how to accept or reject OpenChannel messages received by the node. 
+This plugin provides an example of how to accept or reject `OpenChannel` messages received from remote peers based on a custom configuration file `open_channel_interceptor.conf` with parameters `min-active-channels` and `min-total-capacity`. It rejects `OpenChannel` requests from remote peers if they have less than the configured minimum public active channels or public total capacity.
 
 Disclaimer: this plugin is for demonstration purposes only.
 
@@ -24,7 +24,5 @@ eclair-node-<version>/bin/eclair-node.sh <path-to-plugin-jar>/channel-intercepto
 
 ## Commands
 
-```sh
-eclair-cli ??
-```
+There are no cli commands for this plugin.
 
