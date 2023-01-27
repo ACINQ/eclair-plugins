@@ -27,18 +27,19 @@ import fr.acinq.eclair.{AcceptOpenChannel, InterceptOpenChannelCommand, Intercep
 /**
  * Intercept OpenChannel and OpenDualFundedChannel messages received by the node. Respond to the peer
  * that received the request with AcceptOpenChannel to continue the open channel process,
- * optionally with modified local parameters, or fail the request by responding to the initiator
+ * optionally with modified default parameters, or fail the request by responding to the initiator
  * with RejectOpenChannel and an Error message.
  *
  * This example plugin rejects requests to open a channel from nodes with less than a minimum amount of total capacity
  * or too few public channels.
+ *
+ * Note: only one open channel request can be processed at a time.
  */
 object OpenChannelInterceptor {
   // @formatter:off
   private case class WrappedGetNodeResponse(interceptOpenChannelReceived: InterceptOpenChannelReceived, response: Router.GetNodeResponse) extends InterceptOpenChannelCommand
   // @formatter:on
 
-  //
   def apply(minActiveChannels: Int, minTotalCapacity: Satoshi, router: ActorRef[Any]): Behavior[InterceptOpenChannelCommand] = {
     Behaviors.setup {
       context => {
@@ -52,6 +53,19 @@ object OpenChannelInterceptor {
 class OpenChannelInterceptor(minActiveChannels: Int, minTotalCapacity: Satoshi, router: ActorRef[Any], context: ActorContext[InterceptOpenChannelCommand]) {
   import OpenChannelInterceptor._
 
+  // @formatter:off
+  private sealed trait ErrorResponse
+  private object LessThanMinActiveChannelsError extends ErrorResponse {
+    override def toString: String = s"rejected, less than $minActiveChannels active channels"
+  }
+  private object LessThanMinTotalCapacityError extends ErrorResponse {
+    override def toString: String = s"rejected, less than $minTotalCapacity total capacity"
+  }
+  private object NoPublicChannelsError extends ErrorResponse {
+    override def toString: String = s"rejected, no public channels"
+  }
+  // @formatter:on
+
   private def start(): Behavior[InterceptOpenChannelCommand] = {
     Behaviors.receiveMessage[InterceptOpenChannelCommand] {
       case o: InterceptOpenChannelReceived =>
@@ -59,18 +73,23 @@ class OpenChannelInterceptor(minActiveChannels: Int, minTotalCapacity: Satoshi, 
         router ! GetNode(adapter, o.openChannelNonInitiator.remoteNodeId)
         Behaviors.same
       case WrappedGetNodeResponse(o, PublicNode(_, activeChannels, _)) if activeChannels < minActiveChannels =>
-        o.replyTo ! RejectOpenChannel(o.temporaryChannelId, Error(o.temporaryChannelId, s"rejected, less than $minActiveChannels active channels"))
+        rejectOpenChannel(o, LessThanMinActiveChannelsError)
         Behaviors.same
       case WrappedGetNodeResponse(o, PublicNode(_, _, totalCapacity)) if totalCapacity < minTotalCapacity =>
-        o.replyTo ! RejectOpenChannel(o.temporaryChannelId, Error(o.temporaryChannelId, s"rejected, less than $minTotalCapacity total capacity"))
+        rejectOpenChannel(o, LessThanMinTotalCapacityError)
         Behaviors.same
       case WrappedGetNodeResponse(o, UnknownNode(_)) =>
-        o.replyTo ! RejectOpenChannel(o.temporaryChannelId, Error(o.temporaryChannelId, s"rejected, no public channels"))
+        rejectOpenChannel(o, NoPublicChannelsError)
         Behaviors.same
       case WrappedGetNodeResponse(o, PublicNode(_, _, _)) =>
-        o.replyTo ! AcceptOpenChannel(o.temporaryChannelId, o.defaultParams)
+        acceptOpenChannel(o)
         Behaviors.same
     }
   }
 
+  private def acceptOpenChannel(o: InterceptOpenChannelReceived): Unit =
+    o.replyTo ! AcceptOpenChannel(o.temporaryChannelId, o.defaultParams)
+
+  private def rejectOpenChannel(o: InterceptOpenChannelReceived, error: ErrorResponse): Unit =
+    o.replyTo ! RejectOpenChannel(o.temporaryChannelId, Error(o.temporaryChannelId, error.toString))
 }
