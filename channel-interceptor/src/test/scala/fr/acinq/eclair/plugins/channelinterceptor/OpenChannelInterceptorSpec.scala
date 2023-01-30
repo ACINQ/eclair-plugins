@@ -45,7 +45,7 @@ class OpenChannelInterceptorSpec extends ScalaTestWithActorTestKit(ConfigFactory
   val defaultParams: DefaultParams = DefaultParams(100 sat, 100000 msat, 100 msat, CltvExpiryDelta(288), 10)
   val channels: Map[Peer.FinalChannelId, actor.ActorRef] = Map(Peer.FinalChannelId(randomBytes32()) -> system.classicSystem.deadLetters)
   val connectedData: Peer.ConnectedData = Peer.ConnectedData(NodeAddress.fromParts("1.2.3.4", 42000).get, system.classicSystem.deadLetters, Init(TestConstants.Alice.nodeParams.features.initFeatures()), Init(TestConstants.Bob.nodeParams.features.initFeatures()), channels.map { case (k: ChannelId, v) => (k, v) })
-  val openChannelNonInitiator: OpenChannelNonInitiator = OpenChannelNonInitiator(remoteNodeId, Left(openChannel), temporaryChannelId, fundingAmount, openChannel.channelFlags, openChannel.channelType_opt, connectedData.localFeatures, connectedData.remoteFeatures, connectedData.peerConnection.toTyped)
+  val openChannelNonInitiator: OpenChannelNonInitiator = OpenChannelNonInitiator(remoteNodeId, Left(openChannel), connectedData.localFeatures, connectedData.remoteFeatures, connectedData.peerConnection.toTyped)
   val bobAnnouncement: NodeAnnouncement = announcement(TestConstants.Bob.nodeParams.nodeId)
 
   def publicKey(fill: Byte): PublicKey = PrivateKey(ByteVector.fill(32)(fill)).publicKey
@@ -65,22 +65,22 @@ class OpenChannelInterceptorSpec extends ScalaTestWithActorTestKit(ConfigFactory
     import f._
 
     // approve and continue request from public peer
-    openChannelInterceptor ! InterceptOpenChannelReceived(peer.ref, openChannelNonInitiator, temporaryChannelId, defaultParams)
+    openChannelInterceptor ! InterceptOpenChannelReceived(peer.ref, openChannelNonInitiator, defaultParams)
     router.expectMessageType[GetNode].replyTo ! PublicNode(bobAnnouncement, 2, 10000 sat)
     assert(peer.expectMessageType[AcceptOpenChannel] == AcceptOpenChannel(temporaryChannelId, defaultParams))
 
     // fail request from private peer
-    openChannelInterceptor ! InterceptOpenChannelReceived(peer.ref, openChannelNonInitiator, temporaryChannelId, defaultParams)
+    openChannelInterceptor ! InterceptOpenChannelReceived(peer.ref, openChannelNonInitiator, defaultParams)
     router.expectMessageType[GetNode].replyTo ! UnknownNode(remoteNodeId)
     assert(peer.expectMessageType[RejectOpenChannel].error.toAscii.contains("no public channels"))
 
     // fail request from public peer with too low capacity
-    openChannelInterceptor ! InterceptOpenChannelReceived(peer.ref, openChannelNonInitiator, temporaryChannelId, defaultParams)
+    openChannelInterceptor ! InterceptOpenChannelReceived(peer.ref, openChannelNonInitiator, defaultParams)
     router.expectMessageType[GetNode].replyTo ! PublicNode(bobAnnouncement, 2, 9999 sat)
     assert(peer.expectMessageType[RejectOpenChannel].error.toAscii.contains("total capacity"))
 
     // fail request from public peer with too few channels
-    openChannelInterceptor ! InterceptOpenChannelReceived(peer.ref, openChannelNonInitiator, temporaryChannelId, defaultParams)
+    openChannelInterceptor ! InterceptOpenChannelReceived(peer.ref, openChannelNonInitiator, defaultParams)
     router.expectMessageType[GetNode].replyTo ! PublicNode(bobAnnouncement, 1, 10000 sat)
     assert(peer.expectMessageType[RejectOpenChannel].error.toAscii.contains("active channels"))
   }
