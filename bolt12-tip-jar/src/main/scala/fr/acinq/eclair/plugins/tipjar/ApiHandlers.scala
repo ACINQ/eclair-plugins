@@ -23,6 +23,7 @@ object ApiHandlers {
 
   def registerRoutes(kit: TipJarKit, eclairDirectives: EclairDirectives): Route = {
     import eclairDirectives._
+    import fr.acinq.eclair.api.serde.JsonSupport.{formats, marshaller, serialization}
 
     val showOffer: Route = postRequest("tipjarshowoffer") { implicit t =>
       complete(kit.offer.toString)
