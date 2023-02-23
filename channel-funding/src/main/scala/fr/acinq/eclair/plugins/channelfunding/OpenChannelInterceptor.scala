@@ -54,19 +54,6 @@ object OpenChannelInterceptor {
 class OpenChannelInterceptor(minActiveChannels: Int, minTotalCapacity: Satoshi, router: ActorRef[Any], context: ActorContext[InterceptOpenChannelCommand]) {
   import OpenChannelInterceptor._
 
-  // @formatter:off
-  private sealed trait ErrorResponse
-  private object LessThanMinActiveChannelsError extends ErrorResponse {
-    override def toString: String = s"rejected, less than $minActiveChannels active channels"
-  }
-  private object LessThanMinTotalCapacityError extends ErrorResponse {
-    override def toString: String = s"rejected, less than $minTotalCapacity total capacity"
-  }
-  private object NoPublicChannelsError extends ErrorResponse {
-    override def toString: String = s"rejected, no public channels"
-  }
-  // @formatter:on
-
   private def start(): Behavior[InterceptOpenChannelCommand] = {
     Behaviors.receiveMessage[InterceptOpenChannelCommand] {
       case o: InterceptOpenChannelReceived =>
@@ -74,13 +61,13 @@ class OpenChannelInterceptor(minActiveChannels: Int, minTotalCapacity: Satoshi, 
         router ! GetNode(adapter, o.openChannelNonInitiator.remoteNodeId)
         Behaviors.same
       case WrappedGetNodeResponse(o, PublicNode(_, activeChannels, _)) if activeChannels < minActiveChannels =>
-        rejectOpenChannel(o, LessThanMinActiveChannelsError)
+        rejectOpenChannel(o, s"rejected, less than $minActiveChannels active channels")
         Behaviors.same
       case WrappedGetNodeResponse(o, PublicNode(_, _, totalCapacity)) if totalCapacity < minTotalCapacity =>
-        rejectOpenChannel(o, LessThanMinTotalCapacityError)
+        rejectOpenChannel(o, s"rejected, less than $minTotalCapacity total capacity")
         Behaviors.same
       case WrappedGetNodeResponse(o, UnknownNode(_)) =>
-        rejectOpenChannel(o, NoPublicChannelsError)
+        rejectOpenChannel(o, s"rejected, no public channels")
         Behaviors.same
       case WrappedGetNodeResponse(o, PublicNode(_, _, _)) =>
         acceptOpenChannel(o)
@@ -91,6 +78,6 @@ class OpenChannelInterceptor(minActiveChannels: Int, minTotalCapacity: Satoshi, 
   private def acceptOpenChannel(o: InterceptOpenChannelReceived): Unit =
     o.replyTo ! AcceptOpenChannel(o.temporaryChannelId, o.defaultParams)
 
-  private def rejectOpenChannel(o: InterceptOpenChannelReceived, error: ErrorResponse): Unit =
-    o.replyTo ! RejectOpenChannel(o.temporaryChannelId, Error(o.temporaryChannelId, error.toString))
+  private def rejectOpenChannel(o: InterceptOpenChannelReceived, error: String): Unit =
+    o.replyTo ! RejectOpenChannel(o.temporaryChannelId, Error(o.temporaryChannelId, error))
 }
