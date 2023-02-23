@@ -44,7 +44,6 @@ class OpenChannelInterceptorPlugin extends Plugin with Logging {
   }
 
   override def onSetup(setup: Setup): Unit = {
-    // load or generate seed
     config = loadConfiguration(setup.datadir)
   }
 
