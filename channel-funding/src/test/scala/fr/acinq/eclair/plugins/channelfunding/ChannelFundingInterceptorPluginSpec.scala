@@ -26,8 +26,8 @@ class ChannelFundingInterceptorPluginSpec extends AnyFunSuite {
     val config = ConfigFactory.load().getConfig("open-channel-interceptor")
     val minActiveChannels = config.getLong("min-active-channels")
     val minTotalCapacity = Satoshi(config.getLong("min-total-capacity"))
-    assert(minActiveChannels >= 0)
-    assert(minTotalCapacity >= Satoshi(0))
+    assert(minActiveChannels == 10)
+    assert(minTotalCapacity == Satoshi(2000000))
   }
 
 }
