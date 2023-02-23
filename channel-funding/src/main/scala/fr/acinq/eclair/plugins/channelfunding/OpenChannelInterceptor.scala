@@ -41,17 +41,17 @@ object OpenChannelInterceptor {
   private case class WrappedGetNodeResponse(interceptOpenChannelReceived: InterceptOpenChannelReceived, response: Router.GetNodeResponse) extends InterceptOpenChannelCommand
   // @formatter:on
 
-  def apply(minActiveChannels: Int, minTotalCapacity: Satoshi, router: ActorRef[Any]): Behavior[InterceptOpenChannelCommand] = {
+  def apply(minActiveChannels: Int, minTotalCapacity: Satoshi, allowPrivateNodes: Boolean, router: ActorRef[Any]): Behavior[InterceptOpenChannelCommand] = {
     Behaviors.setup {
       context => {
-        new OpenChannelInterceptor(minActiveChannels, minTotalCapacity, router, context).start()
+        new OpenChannelInterceptor(minActiveChannels, minTotalCapacity, allowPrivateNodes, router, context).start()
       }
     }
   }
 
 }
 
-class OpenChannelInterceptor(minActiveChannels: Int, minTotalCapacity: Satoshi, router: ActorRef[Any], context: ActorContext[InterceptOpenChannelCommand]) {
+class OpenChannelInterceptor(minActiveChannels: Int, minTotalCapacity: Satoshi, allowPrivateNodes: Boolean, router: ActorRef[Any], context: ActorContext[InterceptOpenChannelCommand]) {
   import OpenChannelInterceptor._
 
   private def start(): Behavior[InterceptOpenChannelCommand] = {
@@ -67,7 +67,11 @@ class OpenChannelInterceptor(minActiveChannels: Int, minTotalCapacity: Satoshi, 
         rejectOpenChannel(o, s"rejected, less than $minTotalCapacity total capacity")
         Behaviors.same
       case WrappedGetNodeResponse(o, UnknownNode(_)) =>
-        rejectOpenChannel(o, s"rejected, no public channels")
+        if (!allowPrivateNodes) {
+          rejectOpenChannel(o, s"rejected, no public channels")
+        } else {
+          acceptOpenChannel(o)
+        }
         Behaviors.same
       case WrappedGetNodeResponse(o, PublicNode(_, _, _)) =>
         acceptOpenChannel(o)

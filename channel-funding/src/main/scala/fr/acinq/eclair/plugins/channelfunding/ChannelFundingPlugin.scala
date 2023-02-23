@@ -50,8 +50,8 @@ class OpenChannelInterceptorPlugin extends Plugin with Logging {
   override def onKit(kit: Kit): Unit = {
     val minActiveChannels = config.getInt("open-channel-interceptor.min-active-channels")
     val minTotalCapacity = Satoshi(config.getLong("open-channel-interceptor.min-total-capacity"))
-    val openChannelInterceptor = kit.system.spawnAnonymous(Behaviors.supervise(OpenChannelInterceptor(minActiveChannels, minTotalCapacity, kit.router.toTyped)).onFailure(SupervisorStrategy.restart))
-
+    val allowPrivateNodes = config.getBoolean("open-channel-interceptor.allow-private-nodes")
+    val openChannelInterceptor = kit.system.spawnAnonymous(Behaviors.supervise(OpenChannelInterceptor(minActiveChannels, minTotalCapacity, allowPrivateNodes, kit.router.toTyped)).onFailure(SupervisorStrategy.restart))
     pluginKit = OpenChannelInterceptorKit(kit.nodeParams, kit.system, openChannelInterceptor)
   }
 

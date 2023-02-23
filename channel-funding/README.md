@@ -1,6 +1,10 @@
 # Open Channel Interceptor plugin
 
-This plugin provides an example of how to accept or reject `OpenChannel` messages received from remote peers based on a custom configuration file `channel_funding.conf` with parameters `open-channel-interceptor.min-active-channels` and `open-channel-interceptor.min-total-capacity`. It rejects `OpenChannel` requests from remote peers if they have less than the configured minimum public active channels or public total capacity.
+This plugin provides an example of how to accept or reject `OpenChannel` messages received from remote peers based on a custom configuration file `channel_funding.conf` with parameters and defaults described in `reference.conf`.
+
+It rejects `OpenChannel` requests from public remote peers if they have less than the configured minimum active channels or total capacity.
+
+All `OpenChannel` requests from private remote peers are rejected unless `allow-private-nodes=true`.
 
 Disclaimer: this plugin is for demonstration purposes only.
 

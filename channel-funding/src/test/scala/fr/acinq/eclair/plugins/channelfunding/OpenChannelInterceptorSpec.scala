@@ -31,7 +31,7 @@ import fr.acinq.eclair.io.Peer.ChannelId
 import fr.acinq.eclair.router.Router.{GetNode, PublicNode, UnknownNode}
 import fr.acinq.eclair.wire.protocol._
 import fr.acinq.eclair.{AcceptOpenChannel, CltvExpiryDelta, Features, InterceptOpenChannelCommand, InterceptOpenChannelReceived, InterceptOpenChannelResponse, MilliSatoshiLong, RejectOpenChannel, TestConstants, TimestampSecondLong, UInt64, randomBytes32, randomBytes64}
-import org.scalatest.Outcome
+import org.scalatest.{Outcome, Tag}
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 import scodec.bits.ByteVector
 
@@ -56,32 +56,42 @@ class OpenChannelInterceptorSpec extends ScalaTestWithActorTestKit(ConfigFactory
   override def withFixture(test: OneArgTest): Outcome = {
     val router = TestProbe[Any]()
     val peer = TestProbe[InterceptOpenChannelResponse]()
-    val openChannelInterceptor = testKit.spawn(OpenChannelInterceptor(2, 10000 sat, router.ref))
+    val allowPrivateNodes = !test.tags.contains("no-private-peers")
+    val openChannelInterceptor = testKit.spawn(OpenChannelInterceptor(2, 10000 sat, allowPrivateNodes, router.ref))
 
     withFixture(test.toNoArgTest(FixtureParam(router, peer, openChannelInterceptor)))
   }
 
-  test("should intercept and respond to OpenChannelReceived events") { f =>
+  test("approve and continue OpenChannel requests") { f =>
     import f._
 
-    // approve and continue request from public peer
+    // request from public peer
     openChannelInterceptor ! InterceptOpenChannelReceived(peer.ref, openChannelNonInitiator, defaultParams)
     router.expectMessageType[GetNode].replyTo ! PublicNode(bobAnnouncement, 2, 10000 sat)
     assert(peer.expectMessageType[AcceptOpenChannel] == AcceptOpenChannel(temporaryChannelId, defaultParams))
 
-    // fail request from private peer
+    // request from private peer
     openChannelInterceptor ! InterceptOpenChannelReceived(peer.ref, openChannelNonInitiator, defaultParams)
     router.expectMessageType[GetNode].replyTo ! UnknownNode(remoteNodeId)
-    assert(peer.expectMessageType[RejectOpenChannel].error.toAscii.contains("no public channels"))
+    assert(peer.expectMessageType[AcceptOpenChannel] == AcceptOpenChannel(temporaryChannelId, defaultParams))
+  }
 
-    // fail request from public peer with too low capacity
+  test("fail OpenChannel requests", Tag("no-private-peers")) { f =>
+    import f._
+
+    // from public peer with too low capacity
     openChannelInterceptor ! InterceptOpenChannelReceived(peer.ref, openChannelNonInitiator, defaultParams)
     router.expectMessageType[GetNode].replyTo ! PublicNode(bobAnnouncement, 2, 9999 sat)
     assert(peer.expectMessageType[RejectOpenChannel].error.toAscii.contains("total capacity"))
 
-    // fail request from public peer with too few channels
+    // from public peer with too few channels
     openChannelInterceptor ! InterceptOpenChannelReceived(peer.ref, openChannelNonInitiator, defaultParams)
     router.expectMessageType[GetNode].replyTo ! PublicNode(bobAnnouncement, 1, 10000 sat)
     assert(peer.expectMessageType[RejectOpenChannel].error.toAscii.contains("active channels"))
+
+    // from private peer
+    openChannelInterceptor ! InterceptOpenChannelReceived(peer.ref, openChannelNonInitiator, defaultParams)
+    router.expectMessageType[GetNode].replyTo ! UnknownNode(remoteNodeId)
+    assert(peer.expectMessageType[RejectOpenChannel].error.toAscii.contains("no public channels"))
   }
 }
