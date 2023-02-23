@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-package fr.acinq.eclair.plugins.channelinterceptor
+package fr.acinq.eclair.plugins.channelfunding
 
 import com.typesafe.config.ConfigFactory
 import fr.acinq.bitcoin.scalacompat.Satoshi
 import org.scalatest.funsuite.AnyFunSuite
 
-class OpenChannelInterceptorPluginSpec extends AnyFunSuite {
+class ChannelFundingInterceptorPluginSpec extends AnyFunSuite {
 
   test("check default configuration file") {
     val config = ConfigFactory.load().getConfig("open-channel-interceptor")

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package fr.acinq.eclair.plugins.channelinterceptor
+package fr.acinq.eclair.plugins.channelfunding
 
 import akka.actor.ActorSystem
 import akka.actor.typed.scaladsl.Behaviors
@@ -38,7 +38,7 @@ class OpenChannelInterceptorPlugin extends Plugin with Logging {
 
   override def params: PluginParams = new InterceptOpenChannelPlugin {
     // @formatter:off
-    override def name: String = "OpenChannelInterceptorPlugin"
+    override def name: String = "ChannelFundingPlugin"
     // @formatter:on
     override def openChannelInterceptor: ActorRef[InterceptOpenChannelCommand] = pluginKit.openChannelInterceptor
   }
@@ -59,12 +59,12 @@ class OpenChannelInterceptorPlugin extends Plugin with Logging {
   /**
    * Order of precedence for the configuration parameters:
    * 1) Java environment variables (-D...)
-   * 2) Configuration file open_channel_interceptor.conf
+   * 2) Configuration file channel_funding.conf
    * 3) Default values in reference.conf
    */
   private def loadConfiguration(datadir: File): Config =
     ConfigFactory.systemProperties()
-      .withFallback(ConfigFactory.parseFile(new File(datadir, "open_channel_interceptor.conf")))
+      .withFallback(ConfigFactory.parseFile(new File(datadir, "channel_funding.conf")))
       .withFallback(ConfigFactory.load())
       .resolve()
 }

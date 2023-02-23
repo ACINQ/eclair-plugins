@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package fr.acinq.eclair.plugins.channelinterceptor
+package fr.acinq.eclair.plugins.channelfunding
 
 import akka.actor
 import akka.actor.testkit.typed.scaladsl.{ScalaTestWithActorTestKit, TestProbe}

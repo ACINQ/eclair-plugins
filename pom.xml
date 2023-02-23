@@ -10,7 +10,7 @@
     <modules>
         <module>historical-gossip</module>
         <module>offline-commands</module>
-        <module>channel-interceptor</module>
+        <module>channel-funding</module>
     </modules>
 
     <description>Official eclair plugins</description>

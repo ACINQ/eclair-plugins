@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package fr.acinq.eclair.plugins.channelinterceptor
+package fr.acinq.eclair.plugins.channelfunding
 
 import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.actor.typed.{ActorRef, Behavior}
@@ -30,8 +30,9 @@ import fr.acinq.eclair.{AcceptOpenChannel, InterceptOpenChannelCommand, Intercep
  * optionally with modified default parameters, or fail the request by responding to the initiator
  * with RejectOpenChannel and an Error message.
  *
- * This example plugin rejects requests to open a channel from nodes with less than a minimum amount of total capacity
- * or too few public channels.
+ * This example plugin decides how much funds (if any) the non-initiator should put into a dual-funded channel. It also
+ * demonstrates how to reject requests from nodes with less than a minimum amount of total capacity or too few public
+ * channels.
  *
  * Note: only one open channel request can be processed at a time.
  */
