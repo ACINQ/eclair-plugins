@@ -2,44 +2,24 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>fr.acinq.eclair</groupId>
-    <artifactId>eclair-plugins_2.13</artifactId>
-    <version>0.8.1-SNAPSHOT</version>
+    <groupId>com.getalby.eclair</groupId>
+    <artifactId>eclair-plugins</artifactId>
+    <version>0.8.0</version>
     <packaging>pom</packaging>
 
     <modules>
-        <module>historical-gossip</module>
-        <module>offline-commands</module>
+        <module>eclair-rabbitmq</module>
+        <module>eclair-keysend</module>
     </modules>
 
-    <description>Official eclair plugins</description>
-    <url>https://github.com/ACINQ/eclair-plugins</url>
     <name>${project.artifactId}</name>
-
-    <scm>
-        <connection>scm:git:git@github.com:ACINQ/eclair-plugins.git</connection>
-        <developerConnection>scm:git:git@github.com:ACINQ/eclair-plugins.git</developerConnection>
-        <url>git@github.com:ACINQ/eclair-plugins.git</url>
-    </scm>
 
     <developers>
         <developer>
-            <id>dpad85</id>
+            <id>LucasRouckhout</id>
         </developer>
         <developer>
-            <id>sstone</id>
-        </developer>
-        <developer>
-            <id>pm47</id>
-        </developer>
-        <developer>
-            <id>t-bast</id>
-        </developer>
-        <developer>
-            <id>remyers</id>
-        </developer>
-        <developer>
-            <id>thomash-acinq</id>
+            <id>kiwiidb</id>
         </developer>
     </developers>
 
@@ -53,7 +33,7 @@
         <scalatest.version>3.2.12</scalatest.version>
         <akka.version>2.6.20</akka.version>
         <akka.http.version>10.2.7</akka.http.version>
-        <eclair.version>0.8.1-SNAPSHOT</eclair.version>
+        <eclair.version>0.8.0</eclair.version>
     </properties>
 
     <build>
@@ -88,70 +68,6 @@
                 <version>3.2.0</version>
                 <inherited>true</inherited>
             </plugin>
-            <plugin>
-                <groupId>net.alchim31.maven</groupId>
-                <artifactId>scala-maven-plugin</artifactId>
-                <version>4.7.2</version>
-                <configuration>
-                    <args combine.children="append">
-                        <arg>-feature</arg>
-                        <arg>-language:postfixOps</arg>
-                        <arg>-language:implicitConversions</arg>
-                        <arg>-Werror</arg>
-                        <arg>-unchecked</arg>
-                        <arg>-deprecation</arg>
-                    </args>
-                    <jvmArgs>
-                        <jvmArg>-Xmx1024m</jvmArg>
-                        <jvmArg>-Xms1024m</jvmArg>
-                        <jvmArg>-Xss32m</jvmArg>
-                    </jvmArgs>
-                    <scalaCompatVersion>${scala.version.short}</scalaCompatVersion>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>scalac</id>
-                        <goals>
-                            <goal>compile</goal>
-                            <goal>testCompile</goal>
-                        </goals>
-                    </execution>
-                    <execution>
-                        <id>scaladoc</id>
-                        <goals>
-                            <goal>doc-jar</goal>
-                        </goals>
-                        <configuration>
-                            <skip>${maven.test.skip}</skip>
-                            <args>
-                                <arg>-no-link-warnings</arg>
-                            </args>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <!-- enable scalatest -->
-            <plugin>
-                <groupId>org.scalatest</groupId>
-                <artifactId>scalatest-maven-plugin</artifactId>
-                <version>2.0.2</version>
-                <configuration>
-                    <parallel>true</parallel>
-                    <stdout>I</stdout>
-                    <systemProperties>
-                        <buildDirectory>${project.build.directory}</buildDirectory>
-                    </systemProperties>
-                    <argLine>-Xmx2048m -Dfile.encoding=UTF-8</argLine>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>test</id>
-                        <goals>
-                            <goal>test</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
         </plugins>
     </build>
 
@@ -162,17 +78,25 @@
         </repository>
     </repositories>
 
+
     <dependencies>
         <dependency>
             <groupId>org.scala-lang</groupId>
             <artifactId>scala-library</artifactId>
             <version>${scala.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>org.scalatest</groupId>
-            <artifactId>scalatest_${scala.version.short}</artifactId>
-            <version>${scalatest.version}</version>
-            <scope>test</scope>
+            <groupId>fr.acinq.eclair</groupId>
+            <artifactId>eclair-core_2.13</artifactId>
+            <version>${eclair.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>fr.acinq.eclair</groupId>
+            <artifactId>eclair-node_2.13</artifactId>
+            <version>${eclair.version}</version>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 </project>
