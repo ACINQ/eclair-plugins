@@ -1,5 +1,6 @@
 package com.getalby.eclair;
 
+
 import akka.actor.ActorRef;
 import akka.http.scaladsl.server.RequestContext;
 import akka.http.scaladsl.server.RouteResult;
@@ -12,8 +13,14 @@ import fr.acinq.eclair.payment.send.PaymentInitiator;
 import scala.Function1;
 import scala.Option;
 import scala.concurrent.Future;
+import scala.compat.java8.FutureConverters;
 
-import static akka.http.javadsl.server.Directives.*;
+
+import static akka.http.javadsl.server.Directives.onComplete;
+import static akka.http.javadsl.server.Directives.path;
+import static akka.http.javadsl.server.Directives.complete;
+
+import static akka.pattern.Patterns.ask;
 
 public class KeysendPlugin implements Plugin, RouteProvider {
 
@@ -38,21 +45,21 @@ public class KeysendPlugin implements Plugin, RouteProvider {
 
     @Override
     public Function1<RequestContext, Future<RouteResult>> route(EclairDirectives directives) {
+        final var send = new PaymentInitiator.SendSpontaneousPayment(
+                new MilliSatoshi(690000L),
+                new Crypto.PublicKey(PublicKey.fromHex("037e9d070515c8ba32e6a32fa698e568fc4944a1bb67ae2048947511267202509b")),
+                ByteVector32.One(),
+                2,
+                Option.apply(""),
+                kit.nodeParams().routerConf().pathFindingExperimentConf().getRandomConf().getDefaultRouteParams(),
+                null,
+                false
+        );
+        final var fut = ask(kit.paymentInitiator(), send, 1000L);
+        final var s = FutureConverters.toJava(fut);
+
         return path("keysend", () ->
-                post(() -> extractDataBytes(data -> {
-                    final var send = SendSpontaneousPayment(
-                            new MilliSatoshi(690000L),
-                            new Crypto.PublicKey(PublicKey.fromHex("037e9d070515c8ba32e6a32fa698e568fc4944a1bb67ae2048947511267202509b")),
-                            ByteVector32.One(),
-                            2,
-                            Option.apply(""),
-                            kit.nodeParams().routerConf().pathFindingExperimentConf().getRandomConf().getDefaultRouteParams(),
-                            null,
-                            false
-                    );
-                    kit.paymentInitiator().tell(send, keySendActor);
-                    return complete("GREAT SUCCESS");
-                }))
+                onComplete(s, res -> complete((String) res.get()))
         ).asScala();
     }
 }
