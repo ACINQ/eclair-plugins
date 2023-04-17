@@ -40,6 +40,7 @@ import static akka.http.javadsl.server.Directives.complete;
 import static akka.pattern.Patterns.ask;
 
 import java.util.List;
+import java.util.UUID;
 
 public class KeysendPlugin implements Plugin, RouteProvider {
 
@@ -76,17 +77,15 @@ public class KeysendPlugin implements Plugin, RouteProvider {
             new Crypto.PublicKey(PublicKey.fromHex("031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f")),
             ByteVector32.One(),
             1,
-            Option.apply(""),
+            null,
             params,
             null,
             false);
-        System.out.println(ssp);
-        //final var fut = ask(kit.paymentInitiator(), ssp, 1000L);
-        //final var s = FutureConverters.toJava(fut);
-
+        final var fut = ask(kit.paymentInitiator(), ssp, 1000L);
+        final var s = FutureConverters.toJava(fut);
         return path("keysend", () ->
-                complete("dummy")
-        ).asScala();
+                onComplete(s, res -> complete((String) res.get().toString()))).asScala();
+
     }
     public Seq<GenericTlv> convertListToSeq(List<GenericTlv> inputList) {
         return JavaConverters.asScalaIteratorConverter(inputList.iterator()).asScala().toSeq();

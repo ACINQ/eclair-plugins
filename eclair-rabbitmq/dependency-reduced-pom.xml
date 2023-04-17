@@ -44,7 +44,7 @@
     <dependency>
       <groupId>fr.acinq.eclair</groupId>
       <artifactId>eclair-core_2.13</artifactId>
-      <version>0.8.0</version>
+      <version>0.8.1-SNAPSHOT</version>
       <scope>provided</scope>
       <exclusions>
         <exclusion>
@@ -148,10 +148,6 @@
           <groupId>com.softwaremill.quicklens</groupId>
         </exclusion>
         <exclusion>
-          <artifactId>kamon-prometheus_2.13</artifactId>
-          <groupId>io.kamon</groupId>
-        </exclusion>
-        <exclusion>
           <artifactId>kamon-core_2.13</artifactId>
           <groupId>io.kamon</groupId>
         </exclusion>
@@ -164,7 +160,7 @@
     <dependency>
       <groupId>fr.acinq.eclair</groupId>
       <artifactId>eclair-node_2.13</artifactId>
-      <version>0.8.0</version>
+      <version>0.8.1-SNAPSHOT</version>
       <scope>provided</scope>
       <exclusions>
         <exclusion>
@@ -197,6 +193,10 @@
         </exclusion>
         <exclusion>
           <artifactId>kamon-jdbc_2.13</artifactId>
+          <groupId>io.kamon</groupId>
+        </exclusion>
+        <exclusion>
+          <artifactId>kamon-prometheus_2.13</artifactId>
           <groupId>io.kamon</groupId>
         </exclusion>
         <exclusion>
