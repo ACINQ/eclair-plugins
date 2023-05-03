@@ -25,14 +25,15 @@ import fr.acinq.eclair.io.OpenChannelInterceptor.{DefaultParams, OpenChannelNonI
 import fr.acinq.eclair.io.PeerSpec.createOpenChannelMessage
 import fr.acinq.eclair.router.Router.{GetNode, PublicNode, UnknownNode}
 import fr.acinq.eclair.wire.protocol._
-import fr.acinq.eclair.{AcceptOpenChannel, CltvExpiryDelta, Features, InterceptOpenChannelCommand, InterceptOpenChannelReceived, InterceptOpenChannelResponse, MilliSatoshiLong, RejectOpenChannel, TimestampSecondLong, randomBytes32, randomBytes64}
+import fr.acinq.eclair.{AcceptOpenChannel, CltvExpiryDelta, Features, InterceptOpenChannelCommand, InterceptOpenChannelReceived, InterceptOpenChannelResponse, MilliSatoshiLong, RejectOpenChannel, TimestampSecondLong, randomBytes64}
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 import org.scalatest.{Outcome, Tag}
 
 class OpenChannelInterceptorSpec extends ScalaTestWithActorTestKit(ConfigFactory.load("application")) with FixtureAnyFunSuiteLike {
   val remoteNodeId: Crypto.PublicKey = PrivateKey(ByteVector32.One).publicKey
+  val peerAddress: NodeAddress = NodeAddress.fromParts("127.0.0.1", 9735).get
   val defaultParams: DefaultParams = DefaultParams(100 sat, 100000 msat, 100 msat, CltvExpiryDelta(288), 10)
-  val openChannel: OpenChannelNonInitiator = OpenChannelNonInitiator(remoteNodeId, Left(createOpenChannelMessage()), Features.empty, Features.empty, TestProbe[Any]().ref)
+  val openChannel: OpenChannelNonInitiator = OpenChannelNonInitiator(remoteNodeId, Left(createOpenChannelMessage()), Features.empty, Features.empty, TestProbe[Any]().ref, peerAddress)
   val announcement: NodeAnnouncement = NodeAnnouncement(randomBytes64(), Features.empty, 1 unixsec, remoteNodeId, Color(100.toByte, 200.toByte, 300.toByte), "node-alias", NodeAddress.fromParts("1.2.3.4", 42000).get :: Nil)
 
   case class FixtureParam(router: TestProbe[Any], peer: TestProbe[InterceptOpenChannelResponse], openChannelInterceptor: ActorRef[InterceptOpenChannelCommand])

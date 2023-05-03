@@ -32,7 +32,7 @@ import java.io.File
  * Intercept OpenChannel messages received by the node and respond by continuing the process
  * of accepting the request, potentially with different local parameters, or failing the request.
  */
-class OpenChannelInterceptorPlugin extends Plugin with Logging {
+class ChannelFundingPlugin extends Plugin with Logging {
   var pluginKit: OpenChannelInterceptorKit = _
   var config: Config = _
 
