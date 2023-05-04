@@ -25,3 +25,5 @@ If you need support for these plugins, head over to their respective github repo
 
 * [Telegram bot for eclair alerts](https://github.com/engenegr/eclair-alarmbot-plugin)
 * [Hosted Channels](https://github.com/btcontract/plugin-hosted-channels)
+* [Nostr Alarm Bot](https://github.com/rorp/eclair-nostr-bot)
+* [Dynamic fees eclair plugin](https://github.com/rorp/eclair-plugin-dynamicfees)
