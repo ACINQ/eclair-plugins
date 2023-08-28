@@ -10,6 +10,7 @@
     <modules>
         <module>historical-gossip</module>
         <module>offline-commands</module>
+        <module>tabconf-tips</module>
     </modules>
 
     <description>Official eclair plugins</description>
