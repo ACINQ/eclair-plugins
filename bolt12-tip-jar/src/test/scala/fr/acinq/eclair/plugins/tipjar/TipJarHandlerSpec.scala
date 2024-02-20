@@ -18,21 +18,18 @@ package fr.acinq.eclair.plugins.tipjar
 
 import akka.actor.testkit.typed.scaladsl.{ScalaTestWithActorTestKit, TestProbe}
 import fr.acinq.bitcoin.scalacompat.ByteVector64
-import fr.acinq.eclair.FeatureSupport.Optional
-import fr.acinq.eclair.Features.BasicMultiPartPayment
-import fr.acinq.eclair.offer.OfferManager.InvoiceRequestActor.ApproveRequest
-import fr.acinq.eclair.offer.OfferManager.PaymentActor.AcceptPayment
-import fr.acinq.eclair.offer.OfferManager.{HandleInvoiceRequest, HandlePayment, InvoiceRequestActor, PaymentActor}
+import fr.acinq.eclair.payment.offer.OfferManager.InvoiceRequestActor.ApproveRequest
+import fr.acinq.eclair.payment.offer.OfferManager.PaymentActor.AcceptPayment
+import fr.acinq.eclair.payment.offer.OfferManager.{HandleInvoiceRequest, HandlePayment, InvoiceRequestActor, PaymentActor}
 import fr.acinq.eclair.wire.protocol.OfferTypes.{InvoiceRequest, InvoiceRequestChain, InvoiceRequestMetadata, InvoiceRequestPayerId, Offer, Signature}
 import fr.acinq.eclair.wire.protocol.TlvStream
 import fr.acinq.eclair.{CltvExpiryDelta, Features, MilliSatoshiLong, TestConstants, randomBytes32, randomKey}
 import org.scalatest.funsuite.AnyFunSuiteLike
-import scodec.bits.ByteVector
 
 class TipJarHandlerSpec extends ScalaTestWithActorTestKit with AnyFunSuiteLike {
   test("handle invoice request") {
     val nodeParams = TestConstants.Alice.nodeParams
-    val handler = testKit.spawn(TipJarHandler(nodeParams.nodeId, 100_000_000 msat, CltvExpiryDelta(1000), Features(BasicMultiPartPayment -> Optional)))
+    val handler = testKit.spawn(TipJarHandler(nodeParams.nodeId, 100_000_000 msat, CltvExpiryDelta(1000)))
 
     val probe = TestProbe[InvoiceRequestActor.Command]()
 
@@ -42,16 +39,15 @@ class TipJarHandlerSpec extends ScalaTestWithActorTestKit with AnyFunSuiteLike {
 
     val approve = probe.expectMessageType[ApproveRequest]
     assert(approve.amount == 100_000_000.msat)
-    assert(approve.features == Features(BasicMultiPartPayment -> Optional))
   }
 
   test("handle payment"){
     val nodeParams = TestConstants.Alice.nodeParams
-    val handler = testKit.spawn(TipJarHandler(nodeParams.nodeId, 100_000_000 msat, CltvExpiryDelta(1000), Features(BasicMultiPartPayment -> Optional)))
+    val handler = testKit.spawn(TipJarHandler(nodeParams.nodeId, 100_000_000 msat, CltvExpiryDelta(1000)))
 
     val probe = TestProbe[PaymentActor.Command]()
 
-    handler ! HandlePayment(probe.ref, randomBytes32(), ByteVector.empty)
+    handler ! HandlePayment(probe.ref, randomBytes32(), None)
 
     probe.expectMessage(AcceptPayment())
   }

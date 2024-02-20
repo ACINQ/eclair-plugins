@@ -22,8 +22,8 @@ import akka.actor.typed.scaladsl.adapter.ClassicActorSystemOps
 import akka.actor.typed.{ActorRef, SupervisorStrategy}
 import akka.http.scaladsl.server.Route
 import fr.acinq.eclair.api.directives.EclairDirectives
-import fr.acinq.eclair.offer.OfferManager
-import fr.acinq.eclair.offer.OfferManager.RegisterOffer
+import fr.acinq.eclair.payment.offer.OfferManager
+import fr.acinq.eclair.payment.offer.OfferManager.RegisterOffer
 import fr.acinq.eclair.wire.protocol.OfferTypes.Offer
 import fr.acinq.eclair.{CltvExpiryDelta, Features, Kit, MilliSatoshi, NodeParams, Plugin, PluginParams, RouteProvider, Setup}
 import grizzled.slf4j.Logging
@@ -45,7 +45,7 @@ class TipJarPlugin extends Plugin with RouteProvider with Logging {
   }
 
   override def onKit(kit: Kit): Unit = {
-    val tipJarHandler = kit.system.spawn(Behaviors.supervise(TipJarHandler(kit.nodeParams.nodeId, config.defaultAmount, config.maxFinalExpiryDelta, kit.nodeParams.features.bolt12Features().unscoped())).onFailure(SupervisorStrategy.restart), "tip-jar-handler")
+    val tipJarHandler = kit.system.spawn(Behaviors.supervise(TipJarHandler(kit.nodeParams.nodeId, config.defaultAmount, config.maxFinalExpiryDelta)).onFailure(SupervisorStrategy.restart), "tip-jar-handler")
     val offer = Offer(None, config.offerDescription, kit.nodeParams.nodeId, Features.empty, kit.nodeParams.chainHash)
     kit.offerManager ! RegisterOffer(offer, kit.nodeParams.privateKey, None, tipJarHandler)
     pluginKit = TipJarKit(kit.nodeParams, offer, kit.system, tipJarHandler)
