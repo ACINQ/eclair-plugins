@@ -24,12 +24,12 @@ import scodec.bits.ByteVector
 import scala.jdk.CollectionConverters.CollectionHasAsScala
 
 /**
- * @param whitelist         nodes from this whitelist will be allowed even if they don't meet requirements.
- * @param minActiveChannels minimum number of public channels the remote node must have.
- * @param minTotalCapacity  minimum total capacity of existing public channels the remote node must have.
- * @param allowPrivateNodes if true, we allow channels from private nodes (who have no public channels yet).
+ * @param whitelist          nodes from this whitelist will be allowed even if they don't meet requirements.
+ * @param minActiveChannels  minimum number of public channels the remote node must have.
+ * @param minTotalCapacity   minimum total capacity of existing public channels the remote node must have.
+ * @param rejectPrivateNodes if true, we reject channels from private nodes (who have no public channels yet).
  */
-case class RemoteNodeRequirements(whitelist: Set[PublicKey], minActiveChannels: Int, minTotalCapacity: Satoshi, allowPrivateNodes: Boolean) {
+case class RemoteNodeRequirements(whitelist: Set[PublicKey], minActiveChannels: Int, minTotalCapacity: Satoshi, rejectPrivateNodes: Boolean) {
   def isWhitelisted(nodeId: PublicKey): Boolean = whitelist.contains(nodeId)
 }
 
@@ -46,7 +46,7 @@ object ChannelFundingPluginConfig {
         whitelist = config.getStringList("channel-funding.remote-node-requirements.peer-whitelist").asScala.map(s => PublicKey(ByteVector.fromValidHex(s), checkValid = true)).toSet,
         minActiveChannels = config.getInt("channel-funding.remote-node-requirements.min-active-channels"),
         minTotalCapacity = Satoshi(config.getLong("channel-funding.remote-node-requirements.min-total-capacity-sat")),
-        allowPrivateNodes = config.getBoolean("channel-funding.remote-node-requirements.allow-private-nodes"),
+        rejectPrivateNodes = config.getBoolean("channel-funding.remote-node-requirements.reject-private-nodes"),
       ),
       DualFundingLiquidityPolicy(
         whitelist = config.getStringList("channel-funding.dual-funding-liquidity-policy.peer-whitelist").asScala.map(s => PublicKey(ByteVector.fromValidHex(s), checkValid = true)).toSet,

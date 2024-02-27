@@ -65,7 +65,7 @@ class OpenChannelInterceptor(config: ChannelFundingPluginConfig, router: ActorRe
         rejectOpenChannel(o, s"channel request rejected, remote node has less than ${config.remoteNodeRequirements.minTotalCapacity} of public total capacity")
         Behaviors.same
       case WrappedGetNodeResponse(o, UnknownNode(_)) =>
-        if (!config.remoteNodeRequirements.allowPrivateNodes) {
+        if (config.remoteNodeRequirements.rejectPrivateNodes) {
           rejectOpenChannel(o, "channel request rejected, remote node has no public channels")
         } else {
           acceptOpenChannel(o)

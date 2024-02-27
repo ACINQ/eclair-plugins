@@ -48,7 +48,7 @@ class OpenChannelInterceptorSpec extends ScalaTestWithActorTestKit(ConfigFactory
         whitelist = Set(whitelistedRemoteNodeId),
         minActiveChannels = 2,
         minTotalCapacity = 10_000 sat,
-        allowPrivateNodes = !test.tags.contains("no-private-peers")
+        rejectPrivateNodes = test.tags.contains("no-private-peers")
       ),
       DualFundingLiquidityPolicy(
         whitelist = Set(whitelistedRemoteNodeId),
