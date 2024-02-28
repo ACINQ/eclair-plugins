@@ -11,6 +11,7 @@
         <module>historical-gossip</module>
         <module>offline-commands</module>
         <module>bolt12-tip-jar</module>
+        <module>channel-funding</module>
     </modules>
 
     <description>Official eclair plugins</description>
