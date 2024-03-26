@@ -28,7 +28,6 @@ import fr.acinq.eclair.message.OnionMessages.{IntermediateNode, Recipient}
 import fr.acinq.eclair.payment.offer.OfferManager
 import fr.acinq.eclair.payment.offer.OfferManager.RegisterOffer
 import fr.acinq.eclair.payment.receive.MultiPartHandler.{DummyBlindedHop, ReceivingRoute}
-import fr.acinq.eclair.wire.protocol.OfferTypes
 import fr.acinq.eclair.wire.protocol.OfferTypes.{Offer, OfferPaths, OfferTlv}
 import fr.acinq.eclair.{CltvExpiryDelta, Features, Kit, MilliSatoshi, NodeParams, Plugin, PluginParams, RouteProvider, Setup, randomBytes32, randomKey}
 import grizzled.slf4j.Logging
@@ -79,7 +78,7 @@ class TipJarPlugin extends Plugin with RouteProvider with Logging {
         randomKey(),
         config.intermediateNodes.map(IntermediateNode(_)) ++ Seq.fill(config.dummyHops)(IntermediateNode(kit.nodeParams.nodeId)),
         Recipient(kit.nodeParams.nodeId, Some(pathId)))
-      (Set[OfferTlv](OfferPaths(Seq(OfferTypes.BlindedPath(path)))), Some(pathId), randomKey())
+      (Set[OfferTlv](OfferPaths(Seq(path))), Some(pathId), randomKey())
     } else {
       (Set.empty[OfferTlv], None, kit.nodeParams.privateKey)
     }
@@ -90,6 +89,7 @@ class TipJarPlugin extends Plugin with RouteProvider with Logging {
 
   override def route(eclairDirectives: EclairDirectives): Route = ApiHandlers.registerRoutes(pluginKit, eclairDirectives)
 
+  def offer: Offer = pluginKit.offer
 }
 
 case class TipJarConfig(offerDescription: String, defaultAmount: MilliSatoshi, maxFinalExpiryDelta: CltvExpiryDelta, intermediateNodes: Seq[PublicKey], dummyHops: Int)
