@@ -34,7 +34,7 @@ class TipJarHandlerSpec extends ScalaTestWithActorTestKit with AnyFunSuiteLike {
 
     val probe = TestProbe[InvoiceRequestActor.Command]()
 
-    val offer = Offer(None, "test tip jar", nodeParams.nodeId, Features.empty, nodeParams.chainHash)
+    val offer = Offer(None, Some("test tip jar"), nodeParams.nodeId, Features.empty, nodeParams.chainHash)
     val invoiceRequest = InvoiceRequest(TlvStream(offer.records.records ++ Set(InvoiceRequestMetadata(randomBytes32()), InvoiceRequestChain(nodeParams.chainHash), InvoiceRequestPayerId(randomKey().publicKey), Signature(ByteVector64.Zeroes))))
     handler ! HandleInvoiceRequest(probe.ref, invoiceRequest)
 
