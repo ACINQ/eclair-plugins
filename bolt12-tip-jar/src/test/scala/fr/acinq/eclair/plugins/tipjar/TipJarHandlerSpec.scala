@@ -21,6 +21,7 @@ import fr.acinq.bitcoin.scalacompat.ByteVector64
 import fr.acinq.eclair.payment.offer.OfferManager.InvoiceRequestActor.ApproveRequest
 import fr.acinq.eclair.payment.offer.OfferManager.PaymentActor.AcceptPayment
 import fr.acinq.eclair.payment.offer.OfferManager.{HandleInvoiceRequest, HandlePayment, InvoiceRequestActor, PaymentActor}
+import fr.acinq.eclair.payment.receive.MultiPartHandler.ReceivingRoute
 import fr.acinq.eclair.wire.protocol.OfferTypes.{InvoiceRequest, InvoiceRequestChain, InvoiceRequestMetadata, InvoiceRequestPayerId, Offer, Signature}
 import fr.acinq.eclair.wire.protocol.TlvStream
 import fr.acinq.eclair.{CltvExpiryDelta, Features, MilliSatoshiLong, TestConstants, randomBytes32, randomKey}
@@ -29,11 +30,11 @@ import org.scalatest.funsuite.AnyFunSuiteLike
 class TipJarHandlerSpec extends ScalaTestWithActorTestKit with AnyFunSuiteLike {
   test("handle invoice request") {
     val nodeParams = TestConstants.Alice.nodeParams
-    val handler = testKit.spawn(TipJarHandler(nodeParams.nodeId, 100_000_000 msat, CltvExpiryDelta(1000)))
+    val handler = testKit.spawn(TipJarHandler(ReceivingRoute(Seq(nodeParams.nodeId), CltvExpiryDelta(1000)), 100_000_000 msat))
 
     val probe = TestProbe[InvoiceRequestActor.Command]()
 
-    val offer = Offer(None, "test tip jar", nodeParams.nodeId, Features.empty, nodeParams.chainHash)
+    val offer = Offer(None, Some("test tip jar"), nodeParams.nodeId, Features.empty, nodeParams.chainHash)
     val invoiceRequest = InvoiceRequest(TlvStream(offer.records.records ++ Set(InvoiceRequestMetadata(randomBytes32()), InvoiceRequestChain(nodeParams.chainHash), InvoiceRequestPayerId(randomKey().publicKey), Signature(ByteVector64.Zeroes))))
     handler ! HandleInvoiceRequest(probe.ref, invoiceRequest)
 
@@ -43,7 +44,7 @@ class TipJarHandlerSpec extends ScalaTestWithActorTestKit with AnyFunSuiteLike {
 
   test("handle payment"){
     val nodeParams = TestConstants.Alice.nodeParams
-    val handler = testKit.spawn(TipJarHandler(nodeParams.nodeId, 100_000_000 msat, CltvExpiryDelta(1000)))
+    val handler = testKit.spawn(TipJarHandler(ReceivingRoute(Seq(nodeParams.nodeId), CltvExpiryDelta(1000)), 100_000_000 msat))
 
     val probe = TestProbe[PaymentActor.Command]()
 
