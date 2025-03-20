@@ -36,7 +36,7 @@ You can also change the `eclair.version` property in `pom.xml`.
 
 Notes:
 
-- If the build fails, you may need to clean previously built artifacts with the `mvn clean` command.
+- If the build fails, you may need to clean previously built artifacts with the `./mvnw clean` command.
 - Packaged plugins can be found in the `target` folder for each plugin.
 
 ### Skip tests
