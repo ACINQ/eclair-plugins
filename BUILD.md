@@ -2,8 +2,7 @@
 
 ## Requirements
 
-- [OpenJDK 11](https://adoptopenjdk.net/?variant=openjdk11&jvmVariant=hotspot)
-- [Maven](https://maven.apache.org/download.cgi) 3.6.3 or newer
+- [OpenJDK 21](https://adoptium.net/temurin/releases/?package=jdk&version=21).
 
 ## Build eclair
 
@@ -12,9 +11,9 @@ Clone the version of eclair you're interested in (in most cases it will either b
 
 ```shell
 # Install eclair to your local maven repository:
-mvn install -DskipTests
+./mvnw install -DskipTests
 # Get the corresponding eclair version:
-ECLAIR_VERSION=$(mvn help:evaluate -q -Dexpression=project.version -DforceStdout)
+ECLAIR_VERSION=$(./mvnw help:evaluate -q -Dexpression=project.version -DforceStdout)
 ```
 
 ## Build
@@ -24,13 +23,13 @@ Eclair plugins are packaged as jar files that contain an implementation of eclai
 To build all plugins and run the tests, simply run:
 
 ```shell
-mvn package
+./mvnw package
 ```
 
 If you're using a version of eclair that is different from the version of eclair-plugins, you'll need to specify it explicitly:
 
 ```shell
-mvn -Declair.version=$ECLAIR_VERSION package 
+./mvnw -Declair.version=$ECLAIR_VERSION package 
 ```
 
 You can also change the `eclair.version` property in `pom.xml`.
@@ -45,7 +44,7 @@ Notes:
 Running tests takes time. If you want to skip them, use `-DskipTests`:
 
 ```shell
-mvn package -DskipTests
+./mvnw package -DskipTests
 ```
 
 ### Run tests
@@ -53,19 +52,19 @@ mvn package -DskipTests
 To only run the tests, run:
 
 ```shell
-mvn test
+./mvnw test
 ```
 
 To run tests for a specific class, run:
 
 ```shell
-mvn test -Dsuites=*<TestClassName>
+./mvnw test -Dsuites=*<TestClassName>
 ```
 
 To run tests using a specific number of threads, run:
 
 ```shell
-mvn -T <thread_count> test
+./mvnw -T <thread_count> test
 ```
 
 ### Build specific plugins
@@ -74,5 +73,5 @@ To only build a specific plugin, run the previous commands directly in its direc
 
 ```shell
 cd plugin-name
-mvn package
+./mvnw package
 ```

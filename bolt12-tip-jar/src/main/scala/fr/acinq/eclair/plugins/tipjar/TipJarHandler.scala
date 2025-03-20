@@ -18,19 +18,17 @@ package fr.acinq.eclair.plugins.tipjar
 
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
-import fr.acinq.eclair.MilliSatoshi
 import fr.acinq.eclair.payment.offer.OfferManager
 import fr.acinq.eclair.payment.offer.OfferManager.HandlerCommand
 import fr.acinq.eclair.payment.offer.OfferManager.InvoiceRequestActor.ApproveRequest
 import fr.acinq.eclair.payment.offer.OfferManager.PaymentActor.AcceptPayment
-import fr.acinq.eclair.payment.receive.MultiPartHandler.ReceivingRoute
 
 object TipJarHandler {
 
-  def apply(route: ReceivingRoute, defaultAmount: MilliSatoshi): Behavior[HandlerCommand] = {
+  def apply(route: OfferManager.InvoiceRequestActor.Route): Behavior[HandlerCommand] = {
     Behaviors.receiveMessage {
       case OfferManager.HandleInvoiceRequest(replyTo, invoiceRequest) =>
-        replyTo ! ApproveRequest(invoiceRequest.amount.getOrElse(defaultAmount), Seq(route), None)
+        replyTo ! ApproveRequest(invoiceRequest.amount, Seq(route), None)
         Behaviors.same
       case OfferManager.HandlePayment(replyTo, _, _) =>
         replyTo ! AcceptPayment()

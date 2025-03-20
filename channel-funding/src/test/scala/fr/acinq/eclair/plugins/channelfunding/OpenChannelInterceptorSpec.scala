@@ -81,7 +81,7 @@ class OpenChannelInterceptorSpec extends ScalaTestWithActorTestKit(ConfigFactory
     router.expectNoMessage(100 millis) // we don't check requirements for whitelisted nodes
     val accept = peer.expectMessageType[AcceptOpenChannel]
     assert(accept.temporaryChannelId == openChannelDualFunded.temporaryChannelId)
-    assert(accept.localFundingAmount_opt.contains(200_000 sat))
+    assert(accept.addFunding_opt.contains(LiquidityAds.AddFunding(200_000 sat, None)))
   }
 
   test("reject channel requests", Tag("no-private-peers")) { f =>

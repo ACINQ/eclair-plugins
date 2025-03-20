@@ -28,9 +28,10 @@ import fr.acinq.eclair.message.OnionMessages
 import fr.acinq.eclair.message.OnionMessages.{IntermediateNode, Recipient}
 import fr.acinq.eclair.payment.offer.OfferManager
 import fr.acinq.eclair.payment.offer.OfferManager.RegisterOffer
-import fr.acinq.eclair.payment.receive.MultiPartHandler.{DummyBlindedHop, ReceivingRoute}
+import fr.acinq.eclair.payment.relay.Relayer
+import fr.acinq.eclair.router.Router.ChannelHop
 import fr.acinq.eclair.wire.protocol.OfferTypes.Offer
-import fr.acinq.eclair.{CltvExpiryDelta, Features, Kit, MilliSatoshi, NodeParams, Plugin, PluginParams, RouteProvider, Setup, randomBytes32, randomKey}
+import fr.acinq.eclair.{CltvExpiryDelta, Features, Kit, MilliSatoshi, NodeParams, Plugin, PluginParams, RouteProvider, Setup}
 import grizzled.slf4j.Logging
 import scodec.bits.ByteVector
 
@@ -73,9 +74,9 @@ class TipJarPlugin extends Plugin with RouteProvider with Logging {
     require(kit.nodeParams.features.hasFeature(Features.RouteBlinding))
     require(kit.nodeParams.features.hasFeature(Features.OnionMessages))
     val channelFees = kit.nodeParams.relayParams.publicChannelFees
-    val dummyHops = Seq.fill(config.dummyHops)(DummyBlindedHop(channelFees.feeBase, channelFees.feeProportionalMillionths, kit.nodeParams.channelConf.expiryDelta))
-    val route = ReceivingRoute(config.intermediateNodes :+ kit.nodeParams.nodeId, config.maxFinalExpiryDelta, dummyHops)
-    val tipJarHandler = kit.system.spawn(Behaviors.supervise(TipJarHandler(route, config.defaultAmount)).onFailure(SupervisorStrategy.restart), "tip-jar-handler")
+    val dummyHops = Seq.fill(config.dummyHops)(ChannelHop.dummy(kit.nodeParams.nodeId, channelFees.feeBase, channelFees.feeProportionalMillionths, kit.nodeParams.channelConf.expiryDelta))
+    val route = OfferManager.InvoiceRequestActor.Route(dummyHops, config.maxFinalExpiryDelta, feeOverride_opt = Some(Relayer.RelayFees.zero), cltvOverride_opt = Some(kit.nodeParams.channelConf.expiryDelta))
+    val tipJarHandler = kit.system.spawn(Behaviors.supervise(TipJarHandler(route)).onFailure(SupervisorStrategy.restart), "tip-jar-handler")
     val (offer, pathId_opt, key) = if (config.intermediateNodes.nonEmpty || config.dummyHops > 0) {
       val pathId = Crypto.sha256(kit.nodeParams.privateKey.value ++ ByteVector("bolt 12 tip jar".getBytes()))
       val path = OnionMessages.buildRoute(

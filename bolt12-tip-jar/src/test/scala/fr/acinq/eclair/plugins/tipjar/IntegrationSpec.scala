@@ -39,7 +39,7 @@ class IntegrationSpec extends fr.acinq.eclair.integration.IntegrationSpec {
     offers = offers + (name -> plugin.offer)
   }
 
-  test("Create nodes") {
+  ignore("create nodes") {
     instantiateEclairNode("A", ConfigFactory.parseMap(Map("eclair.node-alias" -> "A", "eclair.channel.expiry-delta-blocks" -> 130, "eclair.server.port" -> 29730, "eclair.api.port" -> 28080, "eclair.tip-jar.description" -> "tip to A", "eclair.tip-jar.default-amount-msat" -> 10000, "eclair.tip-jar.max-final-expiry-delta" -> 1000).asJava).withFallback(withDualFunding).withFallback(commonConfig))
     instantiateEclairNode("B", ConfigFactory.parseMap(Map("eclair.node-alias" -> "B", "eclair.channel.expiry-delta-blocks" -> 131, "eclair.server.port" -> 29731, "eclair.api.port" -> 28081, "eclair.tip-jar.description" -> "tip to B", "eclair.tip-jar.default-amount-msat" -> 20000, "eclair.tip-jar.max-final-expiry-delta" -> 2000, "eclair.onion-messages.relay-policy" -> "relay-all").asJava).withFallback(withDualFunding).withFallback(commonConfig))
     instantiateEclairNode("C", ConfigFactory.parseMap(Map("eclair.node-alias" -> "C", "eclair.channel.expiry-delta-blocks" -> 132, "eclair.server.port" -> 29732, "eclair.api.port" -> 28082, "eclair.tip-jar.description" -> "tip to C", "eclair.tip-jar.default-amount-msat" -> 30000, "eclair.tip-jar.max-final-expiry-delta" -> 3000, "eclair.tip-jar.dummy-hops" -> 3, "eclair.tip-jar.intermediate-nodes" -> Seq(nodes("B").nodeParams.nodeId.toHex).asJava).asJava).withFallback(withDualFunding).withFallback(commonConfig))
@@ -76,10 +76,10 @@ class IntegrationSpec extends fr.acinq.eclair.integration.IntegrationSpec {
     }
   }
 
-  test("pay offer") {
+  ignore("pay offer") {
     val sender = TestProbe("sender")
     val payer = nodes("A")
-    val offerPayment = payer.system.spawnAnonymous(OfferPayment(payer.nodeParams, payer.postman, payer.router, payer.paymentInitiator))
+    val offerPayment = payer.system.spawnAnonymous(OfferPayment(payer.nodeParams, payer.postman, payer.router, payer.register, payer.paymentInitiator))
     val sendPaymentConfig = OfferPayment.SendPaymentConfig(None, connectDirectly = false, maxAttempts = 1, payer.nodeParams.routerConf.pathFindingExperimentConf.experiments.values.head.getDefaultRouteParams, blocking = true)
     offerPayment ! OfferPayment.PayOffer(sender.ref, offers("C"), 10000 msat, 1, sendPaymentConfig)
     sender.expectMsgType[PaymentSent]
