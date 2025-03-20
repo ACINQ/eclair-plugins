@@ -20,7 +20,7 @@ import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.actor.typed.{ActorRef, Behavior}
 import fr.acinq.eclair.router.Router
 import fr.acinq.eclair.router.Router.{GetNode, PublicNode, UnknownNode}
-import fr.acinq.eclair.wire.protocol.Error
+import fr.acinq.eclair.wire.protocol.{Error, LiquidityAds}
 import fr.acinq.eclair.{AcceptOpenChannel, InterceptOpenChannelCommand, InterceptOpenChannelReceived, RejectOpenChannel}
 
 /**
@@ -78,7 +78,7 @@ class OpenChannelInterceptor(config: ChannelFundingPluginConfig, router: ActorRe
   }
 
   private def acceptOpenChannel(o: InterceptOpenChannelReceived): Unit = {
-    o.replyTo ! AcceptOpenChannel(o.temporaryChannelId, o.defaultParams, config.fundingPolicy.fundingAmountFor(o.openChannelNonInitiator.remoteNodeId))
+    o.replyTo ! AcceptOpenChannel(o.temporaryChannelId, o.defaultParams, config.fundingPolicy.fundingAmountFor(o.openChannelNonInitiator.remoteNodeId).map(amount => LiquidityAds.AddFunding(amount, rates_opt = None)))
   }
 
   private def rejectOpenChannel(o: InterceptOpenChannelReceived, error: String): Unit = {

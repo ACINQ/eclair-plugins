@@ -4,7 +4,7 @@
 
     <groupId>fr.acinq.eclair</groupId>
     <artifactId>eclair-plugins_2.13</artifactId>
-    <version>0.10.1-SNAPSHOT</version>
+    <version>0.12.0</version>
     <packaging>pom</packaging>
 
     <modules>
@@ -48,14 +48,13 @@
     <properties>
         <project.build.outputTimestamp>2020-01-01T00:00:00Z</project.build.outputTimestamp>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.source>11</maven.compiler.source>
-        <maven.compiler.target>11</maven.compiler.target>
-        <scala.version>2.13.10</scala.version>
+        <maven.compiler.release>21</maven.compiler.release>
+        <scala.version>2.13.11</scala.version>
         <scala.version.short>2.13</scala.version.short>
         <scalatest.version>3.2.12</scalatest.version>
         <akka.version>2.6.20</akka.version>
         <akka.http.version>10.2.7</akka.http.version>
-        <eclair.version>0.10.1-SNAPSHOT</eclair.version>
+        <eclair.version>0.12.0</eclair.version>
     </properties>
 
     <build>
@@ -64,7 +63,7 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-dependency-plugin</artifactId>
-                    <version>3.0.2</version>
+                    <version>3.6.0</version>
                     <executions>
                         <execution>
                             <phase>package</phase>
@@ -80,20 +79,25 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-jar-plugin</artifactId>
-                    <version>3.2.0</version>
+                    <version>3.3.0</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-wrapper-plugin</artifactId>
+                    <version>3.3.2</version>
                 </plugin>
             </plugins>
         </pluginManagement>
         <plugins>
             <plugin>
                 <artifactId>maven-assembly-plugin</artifactId>
-                <version>3.2.0</version>
+                <version>3.6.0</version>
                 <inherited>true</inherited>
             </plugin>
             <plugin>
                 <groupId>net.alchim31.maven</groupId>
                 <artifactId>scala-maven-plugin</artifactId>
-                <version>4.7.2</version>
+                <version>4.8.1</version>
                 <configuration>
                     <args combine.children="append">
                         <arg>-feature</arg>
@@ -102,6 +106,7 @@
                         <arg>-Werror</arg>
                         <arg>-unchecked</arg>
                         <arg>-deprecation</arg>
+                        <arg>-release:${maven.compiler.release}</arg>
                     </args>
                     <jvmArgs>
                         <jvmArg>-Xmx1024m</jvmArg>
@@ -136,7 +141,7 @@
             <plugin>
                 <groupId>org.scalatest</groupId>
                 <artifactId>scalatest-maven-plugin</artifactId>
-                <version>2.0.2</version>
+                <version>2.2.0</version>
                 <configuration>
                     <parallel>true</parallel>
                     <stdout>I</stdout>
