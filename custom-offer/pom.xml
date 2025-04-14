@@ -8,9 +8,9 @@
         <version>0.13.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>bolt12-tip-jar</artifactId>
+    <artifactId>custom-offer</artifactId>
     <packaging>jar</packaging>
-    <name>bolt12-tip-jar</name>
+    <name>custom-offer</name>
 
     <build>
         <plugins>
@@ -22,7 +22,7 @@
                     <transformers>
                         <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                             <manifestEntries>
-                                <Main-Class>fr.acinq.eclair.plugins.tipjar.TipJarPlugin</Main-Class>
+                                <Main-Class>fr.acinq.eclair.plugins.customoffer.CustomOfferPlugin</Main-Class>
                             </manifestEntries>
                         </transformer>
                     </transformers>
