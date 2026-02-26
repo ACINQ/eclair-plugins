@@ -23,7 +23,7 @@ import akka.util.Timeout
 import fr.acinq.bitcoin.scalacompat.Script
 import fr.acinq.eclair.api.directives.EclairDirectives
 import fr.acinq.eclair.api.serde.FormParamExtractors._
-import fr.acinq.eclair.blockchain.fee.{FeeratePerByte, FeeratePerKw}
+import fr.acinq.eclair.blockchain.fee.FeeratePerByte
 import fr.acinq.eclair.channel.ClosingFeerates
 import fr.acinq.eclair.plugins.offlinecommands.OfflineChannelsCloser.CloseChannels
 import scodec.bits.ByteVector
@@ -44,9 +44,9 @@ object ApiHandlers {
         (channelIds, forceCloseAfterHours_opt, scriptPubKey_opt, preferredFeerate_opt, minFeerate_opt, maxFeerate_opt) =>
           val forceCloseAfter_opt = forceCloseAfterHours_opt.map(FiniteDuration(_, TimeUnit.HOURS))
           val closingFeerates_opt = preferredFeerate_opt.map(preferredPerByte => {
-            val preferredFeerate = FeeratePerKw(preferredPerByte)
-            val minFeerate = minFeerate_opt.map(feerate => FeeratePerKw(feerate)).getOrElse(preferredFeerate / 2)
-            val maxFeerate = maxFeerate_opt.map(feerate => FeeratePerKw(feerate)).getOrElse(preferredFeerate * 2)
+            val preferredFeerate = preferredPerByte.perKw
+            val minFeerate = minFeerate_opt.map(feerate => feerate.perKw).getOrElse(preferredFeerate / 2)
+            val maxFeerate = maxFeerate_opt.map(feerate => feerate.perKw).getOrElse(preferredFeerate * 2)
             ClosingFeerates(preferredFeerate, minFeerate, maxFeerate)
           })
           if (scriptPubKey_opt.forall(Script.isNativeWitnessScript)) {

@@ -4,7 +4,7 @@
 
     <groupId>fr.acinq.eclair</groupId>
     <artifactId>eclair-plugins_2.13</artifactId>
-    <version>0.13.0-SNAPSHOT</version>
+    <version>0.14.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <modules>
@@ -54,7 +54,7 @@
         <scalatest.version>3.2.12</scalatest.version>
         <akka.version>2.6.20</akka.version>
         <akka.http.version>10.2.7</akka.http.version>
-        <eclair.version>0.13.0-SNAPSHOT</eclair.version>
+        <eclair.version>0.14.0-SNAPSHOT</eclair.version>
     </properties>
 
     <build>
