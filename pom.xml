@@ -12,6 +12,7 @@
         <module>offline-commands</module>
         <module>custom-offer</module>
         <module>channel-funding</module>
+        <module>utxo-validator</module>
     </modules>
 
     <description>Official eclair plugins</description>
