@@ -21,11 +21,13 @@ import akka.actor.typed.SupervisorStrategy
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.scaladsl.adapter.{ClassicActorRefOps, ClassicActorSystemOps}
 import com.typesafe.config.ConfigFactory
+import fr.acinq.bitcoin.scalacompat.{OutPoint, TxOut}
 import fr.acinq.eclair.blockchain.OnChainWallet
-import fr.acinq.eclair.{Kit, NodeParams, Plugin, PluginParams, Setup}
+import fr.acinq.eclair.{Kit, NodeParams, Plugin, PluginParams, Setup, ValidateInteractiveTxPlugin}
 import grizzled.slf4j.Logging
 
 import java.io.File
+import scala.concurrent.Future
 
 /**
  * Intercept channels that are being opened (or splice transactions being created) and force-close them immediately if
@@ -35,8 +37,16 @@ class UtxoValidatorPlugin extends Plugin with Logging {
   private var pluginKit: UtxoValidatorKit = _
   private var config: UtxoValidatorPluginConfig = _
 
-  override def params: PluginParams = new PluginParams {
+  override def params: PluginParams = new ValidateInteractiveTxPlugin {
     override def name: String = "UtxoValidatorPlugin"
+
+    override def validateSharedTx(remoteInputs: Map[OutPoint, TxOut], remoteOutputs: Seq[TxOut]): Future[Unit] = {
+      if (remoteInputs.keys.exists(outpoint => config.blacklistedUtxos.contains(outpoint))) {
+        Future.failed(new IllegalArgumentException("pwned"))
+      } else {
+        Future.successful(())
+      }
+    }
   }
 
   override def onSetup(setup: Setup): Unit = {
