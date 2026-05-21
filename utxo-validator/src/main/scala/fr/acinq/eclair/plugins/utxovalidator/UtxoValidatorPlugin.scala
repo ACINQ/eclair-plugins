@@ -21,7 +21,7 @@ import akka.actor.typed.SupervisorStrategy
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.scaladsl.adapter.{ClassicActorRefOps, ClassicActorSystemOps}
 import com.typesafe.config.ConfigFactory
-import fr.acinq.bitcoin.scalacompat.{OutPoint, TxOut}
+import fr.acinq.bitcoin.scalacompat.{Crypto, OutPoint, TxOut}
 import fr.acinq.eclair.blockchain.OnChainWallet
 import fr.acinq.eclair.{Kit, NodeParams, Plugin, PluginParams, Setup, ValidateInteractiveTxPlugin}
 import grizzled.slf4j.Logging
@@ -40,7 +40,7 @@ class UtxoValidatorPlugin extends Plugin with Logging {
   override def params: PluginParams = new ValidateInteractiveTxPlugin {
     override def name: String = "UtxoValidatorPlugin"
 
-    override def validateSharedTx(remoteInputs: Map[OutPoint, TxOut], remoteOutputs: Seq[TxOut]): Future[Unit] = {
+    override def validateSharedTx(remoteNodeId: Crypto.PublicKey, remoteInputs: Map[OutPoint, TxOut], remoteOutputs: Seq[TxOut]): Future[Unit] = {
       if (remoteInputs.keys.exists(outpoint => config.blacklistedUtxos.contains(outpoint))) {
         Future.failed(new IllegalArgumentException("pwned"))
       } else {
