@@ -78,7 +78,7 @@ class OpenChannelInterceptor(config: ChannelFundingPluginConfig, router: ActorRe
   }
 
   private def acceptOpenChannel(o: InterceptOpenChannelReceived): Unit = {
-    o.replyTo ! AcceptOpenChannel(o.temporaryChannelId, o.defaultParams, config.fundingPolicy.fundingAmountFor(o.openChannelNonInitiator.remoteNodeId).map(amount => LiquidityAds.AddFunding(amount, rates_opt = None)))
+    o.replyTo ! AcceptOpenChannel(o.temporaryChannelId, config.fundingPolicy.fundingAmountFor(o.openChannelNonInitiator.remoteNodeId).map(amount => LiquidityAds.AddFunding(amount, rates_opt = None)))
   }
 
   private def rejectOpenChannel(o: InterceptOpenChannelReceived, error: String): Unit = {
